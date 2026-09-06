@@ -1,5 +1,5 @@
 import React,{useState,useEffect} from 'react';
-import {Download,Share,Check,X,Plus,MoreVertical,RefreshCw,ClipboardCopy} from 'lucide-react';
+import {Download,Share,Check,X,Plus,MoreVertical,RefreshCw,ClipboardCopy,Trash2} from 'lucide-react';
 
 // Chromium fires beforeinstallprompt and hands you a prompt to replay later, but
 // it fires on its own schedule — often before this bundle has run, since the app
@@ -75,6 +75,18 @@ export function InstallPanel({offer,install,installed,ios,android,chromium}){
   const text=Object.entries(report||{}).map(([k,v])=>k+': '+v).join('\n');
   navigator.clipboard?.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1600)}).catch(()=>{});
  };
+ // A worker stuck half-installed keeps the site uninstallable and cannot be
+ // cleared from a phone without devtools. Your progress is untouched: this
+ // throws away caches and workers, not localStorage or your account.
+ const reset=async()=>{
+  try{
+   const regs=await navigator.serviceWorker?.getRegistrations?.()||[];
+   await Promise.all(regs.map(r=>r.unregister()));
+   const keys=await caches.keys();
+   await Promise.all(keys.map(k=>caches.delete(k)));
+  }catch{}
+  location.reload();
+ };
  const manual=<Manual ios={ios} android={android} chromium={chromium}/>;
  return <section className="account">
   <h3>Install on this device</h3>
@@ -91,6 +103,7 @@ export function InstallPanel({offer,install,installed,ios,android,chromium}){
   {report&&<p className={'install-verdict '+(String(report.verdict).startsWith('BLOCKED')?'bad':'ok')}>{report.verdict}</p>}
   <div className="account-row">
    <button className="ghost-btn" onClick={run}><RefreshCw size={15}/> Re-run check</button>
+   <button className="ghost-btn" onClick={reset}><Trash2 size={15}/> Reset app cache</button>
    <button className="ghost-btn" onClick={copy} disabled={!report}>
     {copied?<Check size={15}/>:<ClipboardCopy size={15}/>} {copied?'Copied':'Copy report'}</button>
   </div>
@@ -135,6 +148,7 @@ export async function installCheck(){
  else{
   const p=await probe(mf.href);
   out.manifestServed=`${p.status} ${p.type}`;
+  out.manifestFirstBytes=p.head;
   if(!p.ok)verdict.push('manifest did not load ('+p.status+')');
   else if(p.html)verdict.push('manifest came back as HTML — a rewrite is swallowing it');
   else{
@@ -167,6 +181,7 @@ export async function installCheck(){
  if(String(out.swRegister).startsWith('FAILED'))verdict.push('service worker did not register');
  const p=await probe('/sw.js');
  out.swServed=`${p.status} ${p.type}`;
+ out.swFirstBytes=p.head;
  if(p.html)verdict.push('/sw.js came back as HTML — a rewrite is swallowing it');
  else if(!p.ok)verdict.push('/sw.js did not load ('+p.status+')');
  try{

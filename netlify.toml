@@ -9,6 +9,19 @@
   to = "/.netlify/functions/generate"
   status = 200
 
+# Ahead of the SPA catch-all, because these two cannot survive being answered
+# with index.html: the worker would not register and the manifest would not
+# parse, and Chrome would then decline to install the site at all.
+[[redirects]]
+  from = "/sw.js"
+  to = "/sw.js"
+  status = 200
+
+[[redirects]]
+  from = "/manifest.webmanifest"
+  to = "/manifest.webmanifest"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -18,6 +31,7 @@
 [[headers]]
   for = "/sw.js"
   [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"
     Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
