@@ -82,8 +82,9 @@ export function InstallPanel({offer,install,installed,ios,android,chromium}){
   try{
    const regs=await navigator.serviceWorker?.getRegistrations?.()||[];
    await Promise.all(regs.map(r=>r.unregister()));
+   // spare the spoken audio: it costs a request per word to rebuild
    const keys=await caches.keys();
-   await Promise.all(keys.map(k=>caches.delete(k)));
+   await Promise.all(keys.filter(k=>k!=='echo-speech').map(k=>caches.delete(k)));
   }catch{}
   location.reload();
  };

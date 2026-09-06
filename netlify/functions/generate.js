@@ -5,6 +5,11 @@ const SUPABASE_URL=process.env.SUPABASE_URL||'https://readnsbbkmvhguuiaxkv.supab
 const SUPABASE_KEY=process.env.SUPABASE_KEY||'sb_publishable_sFGKW5TGB3Mu9RjC2iJLhQ_TL1IJZMF';
 const MODEL=process.env.OPENAI_MODEL||'gpt-4o-mini';
 const DAILY_CAP=Number(process.env.ECHO_DAILY_GENERATIONS||120);
+// Spoken audio is cached forever on the device, so the daily volume is bounded
+// by how many new words you meet — a much higher ceiling than written output.
+const SPEECH_CAP=Number(process.env.ECHO_DAILY_SPEECH||600);
+const TTS_MODEL=process.env.OPENAI_TTS_MODEL||'gpt-4o-mini-tts';
+const TTS_VOICE=process.env.OPENAI_TTS_VOICE||'alloy';
 const key=()=>process.env.OPENAI_API_KEY||process.env.OPENAI_KEY||process.env.VITE_OPENAI_API_KEY;
 
 const json=(code,body)=>({statusCode:code,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
@@ -92,8 +97,8 @@ exports.handler=async event=>{
   let payload;
   try{payload=JSON.parse(event.body||'{}')}catch{return json(400,{error:'Bad request body.'})}
   const {kind,word,cast=[],gender=''}=payload;
-  if(!['mnemonic','sentence','explain','compose'].includes(kind))return json(400,{error:'Unknown generation kind.'});
-  if(!word?.word||!word?.meaning)return json(400,{error:'Missing word.'});
+  if(!['mnemonic','sentence','explain','compose','speech'].includes(kind))return json(400,{error:'Unknown generation kind.'});
+  if(kind!=='speech'&&(!word?.word||!word?.meaning))return json(400,{error:'Missing word.'});
 
   // daily cap, counted as the calling user so row-level security still applies
   const today=new Date().toISOString().slice(0,10);
@@ -104,7 +109,35 @@ exports.handler=async event=>{
     const r=await fetch(`${usageUrl}?user_id=eq.${user.id}&day=eq.${today}&select=requests`,{headers:head});
     used=(await r.json())?.[0]?.requests||0;
   }catch{}
-  if(used>=DAILY_CAP)return json(429,{error:`Daily generation limit reached (${DAILY_CAP}). It resets tomorrow.`});
+  const ceiling=kind==='speech'?SPEECH_CAP:DAILY_CAP;
+  if(used>=ceiling)return json(429,{error:`Daily limit reached (${ceiling}). It resets tomorrow.`});
+
+  // Spoken French comes back as audio, not JSON. It exists because Safari's own
+  // speechSynthesis is on an audio session the page cannot set, so on a phone
+  // with the ringer off it runs and produces nothing anyone can hear; a media
+  // element under the page's playback session does play.
+  if(kind==='speech'){
+    const text=clean(payload.text);
+    if(!text)return json(400,{error:'Nothing to say.'});
+    if(text.length>300)return json(400,{error:'That is too long to speak.'});
+    try{
+      const r=await fetch('https://api.openai.com/v1/audio/speech',{
+        method:'POST',
+        headers:{'content-type':'application/json',authorization:`Bearer ${key()}`},
+        body:JSON.stringify({model:TTS_MODEL,voice:TTS_VOICE,input:text,response_format:'mp3',
+          instructions:'Read this aloud as a native speaker of France French, at a natural pace, clearly enough for a learner.'})
+      });
+      if(!r.ok){
+        let why='';try{why=(await r.json())?.error?.message||''}catch{}
+        return json(502,{error:why||`The voice service returned ${r.status}.`});
+      }
+      const audio=Buffer.from(await r.arrayBuffer());
+      fetch(usageUrl,{method:'POST',headers:{...head,Prefer:'resolution=merge-duplicates'},
+        body:JSON.stringify({user_id:user.id,day:today,requests:used+1})}).catch(()=>{});
+      return {statusCode:200,isBase64Encoded:true,body:audio.toString('base64'),
+        headers:{'content-type':'audio/mpeg','cache-control':'private, max-age=31536000'}};
+    }catch(err){return json(502,{error:(err&&err.message)||'The voice service failed.'})}
+  }
 
   try{
     let out;
@@ -150,7 +183,7 @@ exports.handler=async event=>{
     }
     fetch(usageUrl,{method:'POST',headers:{...head,Prefer:'resolution=merge-duplicates'},
       body:JSON.stringify({user_id:user.id,day:today,requests:used+1})}).catch(()=>{});
-    return json(200,{...out,used:used+1,cap:DAILY_CAP});
+    return json(200,{...out,used:used+1,cap:ceiling});
   }catch(err){
     return json(502,{error:err.message||'Generation failed.'});
   }

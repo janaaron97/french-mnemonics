@@ -25,6 +25,21 @@ async function call(kind,w,extra={}){
  return body;
 }
 
+// Audio, not JSON, so this one does not go through call().
+export async function speechFor(text){
+ const {data}=await supabase.auth.getSession();
+ const token=data?.session?.access_token;
+ if(!token)throw new Error('Sign in again to use the spoken voice.');
+ const res=await fetch(endpoint,{method:'POST',
+  headers:{'content-type':'application/json',authorization:`Bearer ${token}`},
+  body:JSON.stringify({kind:'speech',text})});
+ if(!res.ok){
+  let why='';try{why=(await res.json())?.error||''}catch{}
+  throw new Error(why||`The voice service returned ${res.status}.`);
+ }
+ return res.blob();
+}
+
 export const mnemonicFor=w=>call('mnemonic',w);
 export const sentenceFor=w=>call('sentence',w);
 export const explainFor=(w,sentence)=>call('explain',w,{sentence});

@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
 import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,addDay,addStudy,mastery,spelledCount,standing,stage,streak,bestStreak,lastDays,studySeries,MASTERY} from './engine';
-import {LevelChips,Cues,speak,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud,playFile,hasAudioSession,isApple} from './ui';
+import {LevelChips,Cues,speak,speakLocal,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud,playFile,hasAudioSession,isApple,voiceMode,setVoiceMode} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
 import Library from './library.jsx';
@@ -305,15 +305,20 @@ function App({session}){
    <li><button className="ghost-btn" onClick={async()=>{unlockSound();setTrial(t=>({...t,file:'playing…'}));
     const r=await playFile();setTrial(t=>({...t,file:r}));setCheck(soundReport())}}>2 · Audio file tone</button>
     <span>{trial.file||'not tried'}</span></li>
-   <li><button className="ghost-btn" onClick={()=>{unlockSound();speak('Bonjour, ceci est un test.',setNotice);
-    setTrial(t=>({...t,speech:'queued'}));setTimeout(()=>setCheck(soundReport()),1200)}}>3 · Speak French</button>
+   <li><button className="ghost-btn" onClick={()=>{unlockSound();speakLocal('Bonjour, ceci est un test.',setNotice);
+    setTrial(t=>({...t,speech:'queued'}));setTimeout(()=>setCheck(soundReport()),1200)}}>3 · Browser speech</button>
     <span>{trial.speech||'not tried'}</span></li>
+   <li><button className="ghost-btn" onClick={()=>{unlockSound();speak('Bonjour, ceci est un test.',setNotice);
+    setTrial(t=>({...t,voice:'fetching…'}));setTimeout(()=>{setCheck(soundReport());setTrial(t=>({...t,voice:'see “last” rows below'}))},2500)}}>4 · Spoken audio</button>
+    <span>{trial.voice||'not tried'}</span></li>
   </ol>
   <div className="account-row">
    <button className="ghost-btn" onClick={()=>setCheck(soundReport())}><RefreshCw size={15}/> Refresh</button>
    <button className="ghost-btn" disabled={!check} onClick={()=>{
     navigator.clipboard?.writeText(Object.entries(check||{}).map(([k,v])=>k+': '+v).join('\n'))
      .then(()=>setNotice('Sound report copied.')).catch(()=>{})}}>Copy report</button>
+   <button className="ghost-btn" onClick={()=>{const next=voiceMode()==='ai'?'browser':'ai';setVoiceMode(next);setCheck(soundReport())}}>
+    Voice: {voiceMode()==='ai'?'spoken audio':'browser'}</button>
    {!hasAudioSession()&&<button className={'ghost-btn'+(loud?' on':'')} onClick={()=>{const next=!loud;setLoud(next);setLoudOn(next);setCheck(soundReport())}}>
     Silent-switch hum: {loud?'on':'off'}</button>}
   </div>
@@ -322,6 +327,11 @@ function App({session}){
   <p><b>last started: no</b> with <b>last error: none</b> means the utterance was accepted and never
    began — that is the phone muting it, not the app. An error of <i>not-allowed</i> means Safari refused
    it for want of a gesture, and <i>interrupted</i> or <i>canceled</i> means something cut it off.</p>
+  <p>Test 3 is Safari's own speech, which runs on an audio session this page cannot set: with the ringer
+   switch off it starts, reports nothing wrong, and is silent anyway. Test 4 plays generated French through
+   a media element, which does obey the page's playback session — that is the one that should be audible
+   with the ringer off. Each word is fetched once and then kept on the device, so it costs nothing to
+   repeat and works offline afterwards.</p>
   {isApple()&&<p>{hasAudioSession()
    ?'This Safari supports audioSession, so the page asks for a playback session directly and no silent-switch hum is used.'
    :'This Safari is too old for audioSession, so a near-silent looping track is used instead to escape the ringer switch. It holds the output open, which can itself block speech — if test 3 stays silent while 1 and 2 work, turn the hum off and try again.'}</p>}

@@ -1,6 +1,7 @@
 import React,{useState,useEffect,useRef} from 'react';
 import {Volume2} from 'lucide-react';
 import {tokenize,levels,levelBlurb} from './engine';
+import {speechFor} from './generate.js';
 
 // Safari will not hand out voices until it has loaded them, and reports an
 // empty list on the first call, so cache them and refresh on voiceschanged.
@@ -20,11 +21,17 @@ const ua=()=>(typeof navigator!=='undefined'&&navigator.userAgent)||'';
 export const isApple=()=>/iPad|iPhone|iPod/.test(ua())||(/Macintosh/.test(ua())&&navigator.maxTouchPoints>1);
 export const hasAudioSession=()=>typeof navigator!=='undefined'&&!!navigator.audioSession;
 
-export function speak(text,notice,rate=1){
+// fr-FR before any other French: the corpus is France French, and a phone that
+// lists Amélie (fr-CA) first would otherwise read the whole app in Québécois.
+export function frenchVoice(){
+ const fr=voices.filter(v=>/^fr/i.test(v.lang));
+ return fr.find(v=>/^fr[-_]?FR$/i.test(v.lang))||fr.find(v=>/^fr$/i.test(v.lang))||fr[0];
+}
+export function speakLocal(text,notice,rate=1,source='browser voice'){
  const synth=typeof window!=='undefined'&&window.speechSynthesis;
  if(!synth)return notice?.('Speech is unavailable in this browser. Use the IPA guide.');
  if(!voices.length)readVoices();
- const voice=voices.find(v=>/^fr/i.test(v.lang));
+ const voice=frenchVoice();
  let u;
  try{
   u=new SpeechSynthesisUtterance(String(text));
@@ -38,7 +45,7 @@ export function speak(text,notice,rate=1){
   return notice?.('Speech failed to start. Try again, or check your device volume.');
  }
  const t0=Date.now();
- heard={said:String(text).slice(0,32),voice:voice?`${voice.name} (${voice.lang})`:'device default',
+ heard={said:String(text).slice(0,32),source,voice:voice?`${voice.name} (${voice.lang})`:'device default',
   rate:u.rate,at:new Date().toLocaleTimeString(),started:'no',ended:'no',error:'none',
   startedAfter:'—',wasSpeaking:String(!!synth.speaking),wasPaused:String(!!synth.paused)};
  u.onstart=()=>{heard.started='yes';heard.startedAfter=(Date.now()-t0)+'ms';quiet(true)};
@@ -57,6 +64,84 @@ export function speak(text,notice,rate=1){
  }catch(err){heard.error='threw: '+(err&&err.message)}
 }
 
+// --- the spoken voice ---------------------------------------------------
+// Safari's speechSynthesis runs on an audio session the page cannot set. With
+// the ringer switch off it starts, reports no error, and produces nothing you
+// can hear — which is exactly what the sound report showed. A media element
+// does obey the page's own playback session, so real audio plays where speech
+// cannot. The audio is generated server-side and then cached on the device
+// forever, so a word costs one request the first time it is ever spoken.
+const VOICE='echo-voice',SPEECH_CACHE='echo-speech';
+export const voiceMode=()=>{try{return localStorage.getItem(VOICE)||'ai'}catch{return 'ai'}};
+export function setVoiceMode(m){try{localStorage.setItem(VOICE,m)}catch{}}
+
+// One element, unlocked once inside a gesture and reused for everything after.
+// iOS only gates the first play(); once that has happened the src can change
+// freely, which is what lets audio start after an await.
+let player,playerReady=false,lastUrl;
+function prime(){
+ if(player)return player;
+ try{
+  player=new Audio();
+  player.setAttribute('playsinline','');
+  player.preload='auto';
+ }catch{player=null}
+ return player;
+}
+function unlockPlayer(){
+ const a=prime();
+ if(!a||playerReady)return;
+ try{
+  a.src=beepFile(true);
+  const p=a.play();
+  if(p&&p.then)p.then(()=>{playerReady=true;a.pause();a.currentTime=0}).catch(()=>{});
+  else playerReady=true;
+ }catch{}
+}
+async function voiceBlob(text){
+ const key='/echo-speech/'+encodeURIComponent(text);
+ let store=null;
+ try{store=await caches.open(SPEECH_CACHE)}catch{}
+ if(store){
+  const hit=await store.match(key);
+  if(hit)return hit.blob();
+ }
+ const blob=await speechFor(text);
+ if(store)try{await store.put(key,new Response(blob.slice(),{headers:{'content-type':blob.type||'audio/mpeg'}}))}catch{}
+ return blob;
+}
+export async function playSpoken(text,rate=1){
+ const a=prime();
+ if(!a)throw new Error('No audio element available.');
+ const blob=await voiceBlob(text);
+ if(lastUrl)try{URL.revokeObjectURL(lastUrl)}catch{}
+ lastUrl=URL.createObjectURL(blob);
+ a.src=lastUrl;
+ a.playbackRate=Math.max(.5,Math.min(2,rate));
+ await a.play();
+ playerReady=true;
+ return new Promise(resolve=>{a.onended=()=>resolve('played');setTimeout(()=>resolve('playing'),8000)});
+}
+
+// The one entry point the app calls. Tries real audio, falls back to the
+// browser voice — offline, without a key, or over the daily limit.
+export function speak(text,notice,rate=1){
+ const say=String(text||'').trim();
+ if(!say)return;
+ if(voiceMode()==='browser')return speakLocal(say,notice,rate);
+ heard={said:say.slice(0,32),voice:'spoken audio (server)',rate,at:new Date().toLocaleTimeString(),
+  started:'no',ended:'no',error:'none',startedAfter:'—',source:'fetching…'};
+ const t0=Date.now();
+ playSpoken(say,rate).then(how=>{
+  heard.started='yes';heard.ended=how==='played'?'yes':'no';
+  heard.startedAfter=(Date.now()-t0)+'ms';heard.source='spoken audio';
+ }).catch(err=>{
+  // Say why the audio route failed, then let the browser voice try: it is
+  // better than silence, even where the ringer switch will mute it.
+  speakLocal(say,notice,rate,'browser voice — spoken audio failed: '+((err&&err.message)||'unknown'));
+ });
+}
+
 // An AudioContext starts suspended and Safari only lets a real user gesture
 // resume it — and only truly unlocks once a buffer has actually played.
 let ctx,unlocked=false,warmed=false;
@@ -64,8 +149,15 @@ function audio(){
  try{
   const Ctx=window.AudioContext||window.webkitAudioContext;
   if(!Ctx)return null;
-  ctx=ctx||new Ctx();
-  if(ctx.state==='suspended')ctx.resume();
+  if(!ctx){
+   ctx=new Ctx();
+   // iOS parks a context at 'interrupted' after a call, another app, or the
+   // ringer switch, and it stays there until something resumes it.
+   ctx.addEventListener?.('statechange',()=>{
+    if(ctx.state==='interrupted'||ctx.state==='suspended')ctx.resume().catch(()=>{});
+   });
+  }
+  if(ctx.state!=='running')ctx.resume().catch(()=>{});
   return ctx;
  }catch{return null}
 }
@@ -123,6 +215,7 @@ export function unlockSound(){
  // are both muted on a phone with the ringer off, with no error anywhere.
  try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback'}catch{}
  keepAwake();
+ unlockPlayer();
  // iOS only lets the FIRST utterance begin from inside a user gesture; every
  // one after it is free. Spend that first one on a space nobody hears, so the
  // real one later in a round is never the one being refused.
@@ -159,7 +252,20 @@ export function useSoundUnlock(){
 // A real, audible tone through an <audio> element — a different pipeline from
 // WebAudio and from speech, so testing it separately says which one is muted.
 let toneUrl;
-export function beepFile(){
+let hushUrl;
+export function beepFile(silent){
+ if(silent){
+  if(!hushUrl){
+   const rate=8000,len=1200,buf=new ArrayBuffer(44+len*2),view=new DataView(buf);
+   const tag=(at,t)=>{for(let i=0;i<t.length;i++)view.setUint8(at+i,t.charCodeAt(i))};
+   tag(0,'RIFF');view.setUint32(4,36+len*2,true);tag(8,'WAVEfmt ');
+   view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+   view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+   tag(36,'data');view.setUint32(40,len*2,true);
+   hushUrl=URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+  }
+  return hushUrl;
+ }
  if(!toneUrl){
   const rate=22050,len=Math.floor(rate*.45),buf=new ArrayBuffer(44+len*2),view=new DataView(buf);
   const tag=(at,t)=>{for(let i=0;i<t.length;i++)view.setUint8(at+i,t.charCodeAt(i))};
@@ -222,10 +328,12 @@ export function soundReport(){
   speechWarmedUp:String(isWarmed()),
   audioSession:hasAudioSession()?(navigator.audioSession.type||'default'):'unsupported',
   silentSwitchHum:keeperState(),
+  voiceSource:voiceMode()==='ai'?'spoken audio (falls back to the browser voice)':'browser voice only',
+  audioElement:player?(playerReady?'unlocked':'created, not unlocked'):'not created',
   speech:synth?'available':'missing',
   voices:list.length,
   frenchVoices:fr.length,
-  frenchVoice:fr[0]?`${fr[0].name} (${fr[0].lang})`:'none',
+  frenchVoice:(()=>{const v=frenchVoice();return v?`${v.name} (${v.lang})`:'none'})(),
   speaking:synth?String(!!synth.speaking):'?',
   paused:synth?String(!!synth.paused):'?',
   ...Object.fromEntries(Object.entries(lastSpoken()).map(([k,v])=>['last '+k,v]))
