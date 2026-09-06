@@ -2,7 +2,7 @@ import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
-import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,spelledCount,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
+import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,spelledCount,standing,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
 import {LevelChips,Cues,speak,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
@@ -106,11 +106,12 @@ function App({session}){
   setNotice(`“${word.word}” filed under known words.`);
  };
 
+ // Nothing on this page asks you to write the French — you reveal it and say how
+ // it went — so a rating here is logged against the word without moving mastery.
+ // Mastery is only ever earned by producing the word in a round.
  const rate=grade=>{
-  const climbed=grade!=='again'&&grade!=='hard'&&!state.known[w.id]&&spelledCount(state.cards[w.id])+1>=MASTERY;
-  setState(s=>applyGrade(s,w.id,grade).next);
+  setState(s=>applyGrade(s,w.id,grade,Date.now(),false).next);
   setTime(Date.now());
-  if(climbed)setNotice(`“${w.word}” reached ${MASTERY} clean answers and moved to your known words.`);
   const following=review?due.find(x=>x.id!==w.id):pool.find(x=>x.id!==w.id&&!state.cards[x.id]&&!state.known[x.id]);
   setSelected(following||null);setRevealed(!review);
   if(!following){setReview(false);setNotice(review?'You’re caught up. Come back when your next review is due.':'Every word in these levels has been introduced. Widen the level range.');setPage('Progress')}
@@ -127,6 +128,7 @@ function App({session}){
  };
 
  const run=useMemo(()=>streak(state.days),[state.days]),bestRun=useMemo(()=>bestStreak(state.days),[state.days]);
+ const rank=useMemo(()=>standing(state.points),[state.points]);
  const matches=list=>list.filter(x=>(x.word+' '+x.meaning).toLowerCase().includes(query.toLowerCase()));
  const introduced=pool.filter(x=>state.cards[x.id]||state.known[x.id]).length;
  const shared={words,state,setState,picked,setPicked,notice:setNotice,openWord};
@@ -207,6 +209,16 @@ function App({session}){
  <p className="subtle">Representative France French. /ɑ/–/a/ and /œ̃/–/ɛ̃/ may merge by speaker.</p></>}
 
  {page==='Progress'&&<><div className="page-title"><h1>Progress</h1></div>
+ <div className="level-card">
+  <div className="level-n"><small>LEVEL</small><strong>{rank.level}</strong></div>
+  <div className="level-bar">
+   <div className="progress-track"><i style={{width:rank.pct+'%'}}/></div>
+   <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} points · {rank.toNext.toLocaleString()} to level {rank.level+1}</small>
+  </div>
+  <p className="subtle">A clean answer earns 100–300 points depending on your run, a near miss half of
+   that, and a miss costs 75. Points fall as well as rise, so a bad stretch takes the level back down.
+   Level {rank.level+1} sits at {(rank.points+rank.toNext).toLocaleString()} points in total.</p>
+ </div>
  <div className="streak-card">
   <div><strong>{run}</strong><span>day streak</span></div>
   <div><strong>{bestRun}</strong><span>longest</span></div>
@@ -218,7 +230,7 @@ function App({session}){
   <article><strong>{collected.toLocaleString()}</strong><span>words collected</span></article>
   <article><strong>{Object.keys(state.known).length.toLocaleString()}</strong><span>marked known</span></article>
   <article><strong>{due.length.toLocaleString()}</strong><span>ready for review</span></article>
-  <article><strong>{state.xp.toLocaleString()}</strong><span>XP over {state.rounds} rounds</span></article></div>
+  <article><strong>{state.rounds.toLocaleString()}</strong><span>rounds played</span></article></div>
  <div className="summary-actions">
   <button className="primary" disabled={!due.length} onClick={()=>toPlay('review')}>Play due words <ArrowRight size={18}/></button>
   <button className="ghost-btn" onClick={()=>setState(s=>({...s,sound:!s.sound}))}>Game sound: {state.sound?'on':'off'}</button></div>

@@ -745,3 +745,23 @@ footer{color:var(--dim)}
  .mark-fix{padding:12px 13px}
  .mark-fix p{font-size:15.5px}
 }
+
+/* --- level: the headline number, and how far into it you are --- */
+.level-badge,.level-card{display:flex;align-items:center;gap:18px;background:var(--surface);
+ border:1px solid var(--line);border-radius:14px;padding:16px 18px;flex-wrap:wrap}
+.level-card{margin:22px 0;align-items:flex-start}
+.level-n{display:grid;justify-items:center;gap:2px;flex-shrink:0;min-width:64px}
+.level-n small{font-size:9px;letter-spacing:1.6px;font-weight:700;color:var(--dim)}
+.level-n strong{font-family:Manrope,sans-serif;font-size:38px;font-weight:700;letter-spacing:-2px;line-height:1}
+.level-bar{flex:1;min-width:190px;display:grid;gap:7px}
+.level-bar .progress-track{margin:0;height:7px;background:var(--raise)}
+.level-bar .progress-track i{background:var(--green)}
+.level-bar small{font-size:11.5px;color:var(--muted)}
+.level-card>.subtle{flex-basis:100%;margin:0}
+.cheer>div.down svg{color:var(--red)}
+.stat-grid strong.bad{color:var(--red)}
+@media(max-width:650px){
+ .level-badge,.level-card{gap:14px;padding:14px}
+ .level-n strong{font-size:30px}
+ .level-n{min-width:52px}
+}

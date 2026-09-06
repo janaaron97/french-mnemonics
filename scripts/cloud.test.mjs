@@ -68,10 +68,10 @@ test('only genuinely changed rows are written',()=>{
 test('counters and the level range travel in the state row',()=>{
  const s=blank();
  assert.equal(diff(s,s,['A1'],['A1']).state,null);
- assert.ok(diff(s,{...s,xp:120},['A1'],['A1']).state.xp===120);
+ assert.ok(diff(s,{...s,points:120},['A1'],['A1']).state.xp===120,'points ride in the xp column');
  assert.deepEqual(diff(s,s,['A1'],['A1','B2']).state.levels,['A1','B2']);
- const row=stateRow({...s,xp:-5,rounds:3,cursor:12,sound:false},[]);
- assert.equal(row.xp,0);
+ const row=stateRow({...s,points:-5,rounds:3,cursor:12,sound:false},[]);
+ assert.equal(row.xp,0,'a negative total is floored before it is stored');
  assert.equal(row.sound,false);
  assert.deepEqual(row.levels,['A1']);
 });

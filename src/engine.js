@@ -379,6 +379,27 @@ export function queue({words,mode='discover',progress,now=Date.now(),size=10}){
  const topUp=due.slice(reviews.length,reviews.length+(size-reviews.length-fresh.length));
  return weave(fresh,[...reviews,...topUp]);
 }
+// Points fall as well as rise, so the headline number is a level rather than a
+// running total: a bad stretch pulls it back the way a good one pushed it up.
+// Reaching level n+1 costs STEP*n, so early levels come quickly and later ones
+// ask for sustained clean work rather than one lucky round.
+export const STEP=250;
+export const pointsFor=level=>STEP*level*(level-1)/2;
+export function levelAt(points){
+ const p=Math.max(0,Math.floor(points||0));
+ // closed form, then corrected — floating point must not decide a boundary
+ let n=Math.max(1,Math.floor((1+Math.sqrt(1+8*p/STEP))/2));
+ while(pointsFor(n+1)<=p)n++;
+ while(n>1&&pointsFor(n)>p)n--;
+ return n;
+}
+export function standing(points){
+ const at=Math.max(0,Math.floor(points||0)),level=levelAt(at);
+ const base=pointsFor(level),next=pointsFor(level+1);
+ return {points:at,level,into:at-base,need:next-base,toNext:next-at,
+  pct:Math.min(100,Math.max(0,(at-base)/(next-base)*100))};
+}
+
 const plain=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
 const pad=n=>String(n).padStart(2,'0');
 export const dayKey=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -401,13 +422,17 @@ export function lastDays(days,count=91,from=dayKey()){
  for(let i=count-1;i>=0;i--){const day=shift(from,-i);out.push({day,on:set.has(day)})}
  return out;
 }
-export const empty={version:2,cards:{},notes:{},aiNotes:{},phrases:{},notesOn:{},lib:{},known:{},days:[],cursor:0,xp:0,best:0,rounds:0,sound:true};
+export const empty={version:2,cards:{},notes:{},aiNotes:{},phrases:{},notesOn:{},lib:{},known:{},days:[],cursor:0,points:0,best:0,rounds:0,sound:true};
 export function migrate(saved){
  if(!saved||typeof saved!=='object'||Array.isArray(saved))return {...empty};
  const out={...empty,...saved,version:2,cards:plain(saved.cards),notes:plain(saved.notes),aiNotes:plain(saved.aiNotes),phrases:plain(saved.phrases),notesOn:plain(saved.notesOn),lib:plain(saved.lib),known:plain(saved.known)};
  if(!saved.lib)out.lib=Object.fromEntries(Object.keys(out.cards).map(id=>[id,0]));
  out.days=Array.isArray(saved.days)?saved.days.filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort():[];
- for(const key of ['cursor','xp','best','rounds'])out[key]=Number.isFinite(out[key])?out[key]:0;
+ // saves and backups from before levels stored the same number as `xp`. The
+ // spread has already filled points from `empty`, so ask the saved object.
+ if(!Number.isFinite(saved.points)&&Number.isFinite(saved.xp))out.points=saved.xp;
+ delete out.xp;
+ for(const key of ['cursor','points','best','rounds'])out[key]=Number.isFinite(out[key])?out[key]:0;
  out.sound=out.sound!==false;
  return out;
 }

@@ -26,7 +26,8 @@ export function fromRows({library=[],reviews=[],state=null}){
   // rows written before mastery split off from the outcome log carry neither
   spelled:r.spelled==null?(r.clean||0):r.spelled};
  if(state){
-  out.xp=Number(state.xp)||0;out.rounds=state.rounds||0;out.best=state.best||0;
+  // the column is still called xp; the app calls it points, because it can fall
+  out.points=Number(state.xp)||0;out.rounds=state.rounds||0;out.best=state.best||0;
   out.cursor=state.cursor||0;out.sound=state.sound!==false;
   out.days=Array.isArray(state.days)?[...state.days].filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort():[];
  }
@@ -53,7 +54,7 @@ export const reviewRow=(s,id)=>{
   spelled:count(c.spelled==null?c.clean:c.spelled)};
 };
 export const stateRow=(s,picked)=>({
- xp:Math.max(0,Math.round(s.xp||0)),rounds:Math.max(0,s.rounds||0),best:Math.max(0,s.best||0),
+ xp:Math.max(0,Math.round(s.points||0)),rounds:Math.max(0,s.rounds||0),best:Math.max(0,s.best||0),
  cursor:Math.max(0,s.cursor||0),sound:s.sound!==false,days:Array.isArray(s.days)?s.days:[],
  levels:picked?.length?picked:['A1'],updated_at:new Date().toISOString()});
 

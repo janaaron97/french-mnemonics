@@ -1,6 +1,6 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
-import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift} from 'lucide-react';
-import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,mastery,spelledCount,streak as dayStreak,MASTERY,posOf} from './engine';
+import {X,ArrowRight,Check,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift,TrendingUp,TrendingDown} from 'lucide-react';
+import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,mastery,spelledCount,standing,streak as dayStreak,MASTERY,posOf} from './engine';
 import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor,composeFor} from './generate.js';
 
@@ -16,7 +16,12 @@ const decks=[
 // Each sentence costs a marking call, so a compose round is deliberately short.
 const CAP={compose:5};
 const BONUS=75;
+// A clean answer pays more the longer the run; a miss costs a flat amount and
+// resets the run, so the next clean one earns at the bottom of the scale again.
+// That is what lets a level fall: a bad stretch outruns the earning.
 const points=streak=>100+Math.min(streak,8)*25;
+const MISS=-75;
+const signed=n=>(n>0?'+':'')+n.toLocaleString();
 const words_=text=>String(text).split(/(\s+)/).map((part,i)=>
  /^\s+$/.test(part)||!part?part:<span className="tok" key={i}>{part}</span>);
 function Blank({c,draft,setDraft,field,result,tone3,teaching,submit}){
@@ -57,7 +62,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   const deck=list.map(w=>card(w,m));
   if(m==='compose')deck.forEach((c,i)=>{c.bonus=deck.length>1?deck[(i+1)%deck.length].word:null});
   clearTimeout(timer.current);setMode(m);setHint(false);setDraft('');setShown(0);setTeaching(false);
-  setS({deck,i:0,score:0,streak:0,best:0,right:0,answered:0,collected:0,gain:0,bonuses:0,missed:[],done:[],taughtCount:0,startedAt:Date.now(),result:null,typed:'',mode:m});
+  setS({deck,i:0,score:0,streak:0,best:0,right:0,answered:0,collected:0,gain:0,bonuses:0,missed:[],done:[],taughtCount:0,startedAt:Date.now(),result:null,typed:'',mode:m,levelAtStart:standing(state.points).level});
   setStage('play');
  };
 
@@ -80,7 +85,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   if(!v||v.result)return;
   const c=v.deck[v.i],now=Date.now();
   const outcome=review?review.outcome:teaching?'missed':judge(result,shown>0),ok=outcome!=='missed';
-  const earned=outcome==='clean'?points(v.streak):outcome==='close'?Math.round(points(v.streak)/2):0;
+  const earned=outcome==='clean'?points(v.streak):outcome==='close'?Math.round(points(v.streak)/2):MISS;
   const gain=earned+(review?.usedBonus?BONUS:0);
   // Recognising the English is worth logging but is not the same skill as
   // producing the French, so it never moves mastery.
@@ -95,7 +100,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    const lib={...st.lib};
    for(const id of ids)if(!st.known[id]&&!lib[id])lib[id]=now;
    const {next}=applyGrade({...st,lib,days:addDay(st.days)},c.id,grades[outcome],now,spells);
-   return {...next,xp:next.xp+gain};
+   return {...next,points:Math.max(0,next.points+gain)};
   });
   const streak=ok?v.streak+1:0;
   setS({...v,result,outcome,typed,gain,review,taught:teaching,mastered:climbed,score:v.score+gain,streak,best:Math.max(v.best,streak),
@@ -257,9 +262,9 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
     <div className="mark-head">
      <strong className={'mark-score s'+s.review.score}>{s.review.score}<i>/5</i></strong>
      <div><b>{s.review.verdict||(s.review.score>=4?'Correct.':'Needs work.')}</b>
-      <span>{!s.review.usedWord?`“${c.word.word}” never appeared, so this one counts as a miss.`
-       :s.review.usedBonus?`+${s.gain}, including ${BONUS} for working in “${c.bonus.word}”.`
-       :c.bonus?`+${s.gain}. No bonus — “${c.bonus.word}” went unused.`:`+${s.gain}.`}</span></div>
+      <span>{!s.review.usedWord?`“${c.word.word}” never appeared, so this counts as a miss — ${signed(s.gain)}.`
+       :s.review.usedBonus?`${signed(s.gain)}, including ${BONUS} for working in “${c.bonus.word}”.`
+       :c.bonus?`${signed(s.gain)}. No bonus — “${c.bonus.word}” went unused.`:`${signed(s.gain)}.`}</span></div>
     </div>
     {s.review.notes&&<div className="breakdown">{s.review.notes}</div>}
     {s.review.corrected&&<div className="mark-fix">
@@ -276,7 +281,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
 
    {result&&c.kind!=='compose'&&<div className="verdict">
     <div className="verdict-head">
-     <strong>{s.outcome==='clean'?`+${s.gain}`:s.outcome==='close'?`Almost · +${s.gain}`:s.taught?'Typed it out':'Not this time'}</strong>
+     <strong>{s.outcome==='clean'?signed(s.gain):s.outcome==='close'?`Almost · ${signed(s.gain)}`
+      :`${s.taught?'Typed it out':'Not this time'} · ${signed(s.gain)}`}</strong>
      <button type="button" className="say" onClick={()=>speak(c.word.example,notice)} aria-label="Hear the sentence"><Volume2 size={17}/></button>
      <span lang="fr">{c.word.article||c.word.word} <i>/{c.word.ipa}/</i> — {c.word.meaning} <i>· {c.word.level}</i></span>
     </div>
@@ -323,12 +329,18 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
 }
 
 function Setup({counts,size,setSize,start,state}){
- const run=dayStreak(state.days);
+ const run=dayStreak(state.days),rank=standing(state.points);
  return <div className="lobby">
   <div className="lobby-top">
    <h1>Play</h1>
+   <div className="level-badge">
+    <div className="level-n"><small>LEVEL</small><strong>{rank.level}</strong></div>
+    <div className="level-bar">
+     <div className="progress-track"><i style={{width:rank.pct+'%'}}/></div>
+     <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} to level {rank.level+1}</small>
+    </div>
+   </div>
    <div className="pills">
-    <span><Zap size={14}/><b>{state.xp.toLocaleString()}</b> XP</span>
     <span><Flame size={14}/><b>{run}</b> day{run===1?'':'s'}</span>
     <span><Trophy size={14}/><b>{state.rounds}</b> rounds</span>
    </div>
@@ -358,6 +370,7 @@ function Summary({s,setStage,start,setState,state,openWord,notice,explain,explai
  const fresh=s.done.filter(d=>!d.card.word.seenBefore).length;
  const [open,setOpen]=useState(null);
  const mastered=s.done.filter(d=>state.known[d.card.id]).length;
+ const rank=standing(state.points),moved=rank.level-(s.levelAtStart??rank.level);
  return <div className="done-screen">
   <div className="done-head">
    <button className="hud-quit" onClick={()=>setStage('setup')} aria-label="Close"><X size={20}/></button>
@@ -366,6 +379,11 @@ function Summary({s,setStage,start,setState,state,openWord,notice,explain,explai
   <div className="done-body">
 
   <div className="cheer">
+   <div className={moved<0?'down':''}>
+    {moved<0?<TrendingDown size={22}/>:moved>0?<TrendingUp size={22}/>:<Trophy size={22}/>}
+    <div><strong>Level {rank.level}{moved?` · ${signed(moved)}`:''}</strong>
+     <span>{moved>0?'Up this round.':moved<0?'Down this round — misses cost points.'
+      :`${rank.toNext.toLocaleString()} points to level ${rank.level+1}.`}</span></div></div>
    <div><Flame size={22}/><div><strong>{run} day{run===1?'':'s'} streak</strong><span>{run>1?'Still going.':'Back on it.'}</span></div></div>
    <div><Sparkles size={22}/><div><strong>+{s.collected} words collected</strong><span>Pulled out of the sentences you played.</span></div></div>
    {!!mastered&&<div><Target size={22}/><div><strong>{mastered} mastered</strong><span>Retired to your known words.</span></div></div>}
@@ -373,7 +391,7 @@ function Summary({s,setStage,start,setState,state,openWord,notice,explain,explai
 
   <h2>Stats</h2>
   <div className="stat-grid">
-   <article><strong>+{s.score.toLocaleString()}</strong><span>Points earned</span></article>
+   <article><strong className={s.score<0?'bad':''}>{signed(s.score)}</strong><span>Points this round</span></article>
    <article><strong><Clock size={15}/> {clock}</strong><span>Time spent</span></article>
    <article><strong className="ok">{s.right}</strong><span><Check size={13}/> Clean</span></article>
    <article><strong className="bad">{s.answered-s.right}</strong><span><X size={13}/> Not clean</span></article>

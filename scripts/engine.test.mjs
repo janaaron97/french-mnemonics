@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,standing,levelAt,pointsFor,STEP,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -133,11 +133,11 @@ test('older backups migrate, malformed ones are refused',()=>{
  assert.deepEqual(Object.keys(moved.lib),['1']);
  assert.equal(moved.version,2);
  assert.equal(moved.notes['2'],'mine');
- assert.equal(moved.xp,0);
+ assert.equal(moved.points,0);
  assert.ok(moved.sound);
- const round=validate(JSON.parse(JSON.stringify({...moved,known:{'3':7},xp:250})),words);
+ const round=validate(JSON.parse(JSON.stringify({...moved,known:{'3':7},points:250})),words);
  assert.equal(round.known['3'],7);
- assert.equal(round.xp,250);
+ assert.equal(round.points,250);
  assert.equal(validate({version:3,cards:{}},words),null);
  assert.equal(validate({version:2,cards:{'999999':{due:1,interval:1,reviews:1}}},words),null);
  assert.equal(validate({version:2,known:{'999999':1}},words),null);
@@ -326,4 +326,32 @@ test('the studying modes all draw from the library, due first',()=>{
   assert.deepEqual(list.map(w=>w.id),[9,2],mode+' should be due-first, and skip known words');
  }
  assert.deepEqual(queue({words,mode:'english',progress:{...empty},now,size:10}),[],'an empty library plays nothing');
+});
+
+test('levels are exact at every boundary, and read back from a total that can fall',()=>{
+ assert.equal(pointsFor(1),0);
+ assert.equal(pointsFor(2),STEP);
+ assert.equal(pointsFor(3),STEP*3);
+ for(let l=1;l<=500;l++){
+  const at=pointsFor(l);
+  assert.equal(levelAt(at),l,'boundary '+l);
+  if(l>1)assert.equal(levelAt(at-1),l-1,'just below '+l);
+ }
+ assert.equal(levelAt(0),1);
+ assert.equal(levelAt(-9999),1,'points never read below the floor');
+ assert.equal(levelAt(undefined),1);
+ const at=standing(pointsFor(5)+600);
+ assert.deepEqual([at.level,at.into,at.need,at.toNext],[5,600,STEP*5,STEP*5-600]);
+ assert.ok(at.pct>0&&at.pct<100);
+ assert.deepEqual([standing(0).pct,standing(-50).points],[0,0]);
+ // a level is lost by falling back below its own threshold
+ assert.equal(levelAt(pointsFor(9)),9);
+ assert.equal(levelAt(pointsFor(9)-1),8,'dropping one point below drops the level');
+});
+test('a backup written before levels reads its total back as points',()=>{
+ const old=migrate({version:2,xp:1234,rounds:3,cards:{},lib:{},known:{}});
+ assert.equal(old.points,1234);
+ assert.equal(old.xp,undefined,'the old field does not linger');
+ assert.equal(migrate({version:2}).points,0);
+ assert.equal(migrate({version:2,points:900,xp:5}).points,900,'points wins where both exist');
 });
