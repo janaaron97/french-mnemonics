@@ -1,5 +1,5 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
-import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen} from 'lucide-react';
+import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight} from 'lucide-react';
 import {queue,card,check,sentenceIds,applyGrade,addDay,mastery,streak as dayStreak,MASTERY,posOf} from './engine';
 import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor} from './generate.js';
@@ -7,9 +7,9 @@ import {explainFor} from './generate.js';
 const ROUND=[7,12,20];
 const ACCENTS=['é','è','ê','à','â','î','ï','ô','û','ù','ç','œ'];
 const decks=[
- ['discover',Compass,'Discover','The whole corpus from A1 to C1 in order, resuming where you left off, with anything due for review woven in.'],
- ['library',Layers,'My library','Only the words you have collected — from sentences, swipes, or added by hand. Due ones first.'],
- ['review',History,'Due reviews','Words whose spaced-repetition interval has come around again.']
+ ['discover',Compass,'Discover','A1 → C1 in order, with due reviews woven in'],
+ ['library',Layers,'My library','Words you have collected, due ones first'],
+ ['review',History,'Due reviews','Everything the schedule has brought back']
 ];
 const points=streak=>100+Math.min(streak,8)*25;
 const words_=text=>String(text).split(/(\s+)/).map((part,i)=>
@@ -223,24 +223,31 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
 }
 
 function Setup({counts,size,setSize,start,state}){
- return <>
-  <div className="play-hero">
-   <div>
-    <h1>Play</h1>
-    <p>Every sentence you play drops all of its words into your library.</p>
+ const run=dayStreak(state.days);
+ return <div className="lobby">
+  <div className="lobby-top">
+   <h1>Play</h1>
+   <div className="pills">
+    <span><Zap size={14}/><b>{state.xp.toLocaleString()}</b> XP</span>
+    <span><Flame size={14}/><b>{run}</b> day{run===1?'':'s'}</span>
+    <span><Trophy size={14}/><b>{state.rounds}</b> rounds</span>
    </div>
-   <div className="xp-badge"><Zap size={18}/><Counter value={state.xp}/><span>XP · {state.rounds} rounds</span></div>
   </div>
-  <div className="deck-grid">{decks.map(([m,Icon,title,blurb])=>
-   <button key={m} className="deck" disabled={!counts[m]} onClick={()=>start(m)}>
-    <Icon size={20}/><strong>{title}</strong><p>{blurb}</p>
-    <span className="deck-count">{counts[m].toLocaleString()} ready <ArrowRight size={15}/></span>
+
+  <div className="seg-row">
+   <span className="seg-label">Round length</span>
+   <div className="seg">{ROUND.map(n=>
+    <button key={n} className={size===n?'on':''} onClick={()=>setSize(n)}>{n}</button>)}</div>
+  </div>
+
+  <div className="deck-list">{decks.map(([m,Icon,title,blurb])=>
+   <button key={m} className="deck-row" disabled={!counts[m]} onClick={()=>start(m)}>
+    <span className="deck-icon"><Icon size={19}/></span>
+    <span className="deck-body"><b>{title}</b><small>{blurb}</small></span>
+    <span className="deck-n">{counts[m].toLocaleString()}</span>
+    <ChevronRight size={18}/>
    </button>)}</div>
-  <div className="setup-row"><span className="setup-label">ROUND LENGTH</span>
-   <div className="level-chips compact">{ROUND.map(n=><button key={n} className={size===n?'on':''} onClick={()=>setSize(n)}>{n} cards</button>)}</div>
-  </div>
-  <p className="subtle">Clean answer = Good, accent slip or hint = Hard, miss = Again. {MASTERY} clean answers retires a word.</p>
- </>;
+ </div>;
 }
 
 function Summary({s,setStage,start,setState,state,openWord,notice,explain,explaining}){

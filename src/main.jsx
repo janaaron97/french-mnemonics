@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
 import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
-import {LevelChips,Cues,speak,useSoundUnlock} from './ui';
+import {LevelChips,Cues,speak,useSoundUnlock,unlockSound,tone,soundReport} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
 import Library from './library.jsx';
@@ -39,7 +39,7 @@ function App({session}){
  const [state,setState]=useState(read),[page,setPage]=useState('Play'),[picked,setPicked]=useState(readLevels);
  const [query,setQuery]=useState(''),[selected,setSelected]=useState(null),[revealed,setRevealed]=useState(false);
  const [review,setReview]=useState(false),[notice,setNotice]=useState(''),[soundType,setSoundType]=useState('All');
- const [time,setTime]=useState(Date.now()),[launch,setLaunch]=useState(null),[drawer,setDrawer]=useState(false);
+ const [time,setTime]=useState(Date.now()),[launch,setLaunch]=useState(null),[drawer,setDrawer]=useState(false),[check,setCheck]=useState(null);
 
  useEffect(()=>{try{localStorage.setItem('echo-progress',JSON.stringify(state))}catch{setNotice('Browser storage is full or unavailable. Export your progress before leaving.')}},[state]);
  useEffect(()=>{try{localStorage.setItem('echo-levels',JSON.stringify(picked))}catch{}},[picked]);
@@ -227,6 +227,16 @@ function App({session}){
   const count=words.filter(x=>x.level===l&&(state.lib[x.id]||state.known[x.id])).length;
   return <article key={l}><strong>{l}</strong><em>{levelBlurb[l]}</em><div className="progress-track"><i style={{width:count/total*100+'%'}}/></div>
    <span>{count.toLocaleString()} / {total.toLocaleString()}</span></article>})}</div>
+ <section className="account"><h3>Sound check</h3>
+  <div className="account-row">
+   <button className="ghost-btn" onClick={()=>{unlockSound();tone([[660,0,.12],[880,.1,.16]],true);setCheck(soundReport())}}>Play a beep</button>
+   <button className="ghost-btn" onClick={()=>{unlockSound();speak('Bonjour, ceci est un test.',setNotice);setCheck(soundReport())}}>Speak French</button>
+   <button className="ghost-btn" onClick={()=>setCheck(soundReport())}>Refresh</button>
+  </div>
+  {check&&<dl className="report">{Object.entries(check).map(([k,v])=>
+   <React.Fragment key={k}><dt>{k}</dt><dd>{String(v)}</dd></React.Fragment>)}</dl>}
+  <p>If a button is silent, the readout says which half is at fault. On an iPhone, <b>audioSession: unsupported</b> together with the ringer switch off means the browser is too old to override the silent switch — flip the switch on.</p>
+ </section>
  <section className="account"><h3>Your account.</h3>
   <div className="account-row"><strong>{session.user.email}</strong>
    <span className={'sync-pill '+sync}>{sync==='error'?<><CloudOff size={13}/> not syncing</>

@@ -43,6 +43,10 @@ function audio(){
  }catch{return null}
 }
 export function unlockSound(){
+ // Safari 16.4+ only lets audio through the hardware silent switch when the
+ // page declares a playback audio session. Without this, WebAudio and speech
+ // are both muted on a phone with the ringer off, with no error anywhere.
+ try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback'}catch{}
  const c=audio();
  if(!c||unlocked)return;
  try{
@@ -80,6 +84,25 @@ export function tone(steps,on=true){
  }catch{}
 }
 export const buzz=ms=>{try{navigator.vibrate?.(ms)}catch{}};
+
+// Safari failures here are silent by nature, so make the state inspectable
+// rather than guessing at it from the outside.
+export function soundReport(){
+ const synth=typeof window!=='undefined'&&window.speechSynthesis;
+ const list=synth?(synth.getVoices()||[]):[];
+ const fr=list.filter(v=>/^fr/i.test(v.lang));
+ return {
+  audioContext:ctx?ctx.state:'not created',
+  unlocked,
+  audioSession:(typeof navigator!=='undefined'&&navigator.audioSession)?(navigator.audioSession.type||'default'):'unsupported',
+  speech:synth?'available':'missing',
+  voices:list.length,
+  frenchVoices:fr.length,
+  frenchVoice:fr[0]?`${fr[0].name} (${fr[0].lang})`:'none',
+  speaking:synth?!!synth.speaking:false,
+  paused:synth?!!synth.paused:false
+ };
+}
 
 export function LevelChips({picked,onChange,compact}){
  const all=picked.length===levels.length;
