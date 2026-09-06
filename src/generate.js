@@ -9,14 +9,14 @@ const genderLine=w=>w.article?.startsWith('la ')?'A silver ribbon flutters over 
 
 export const castOf=w=>tokenize(w.ipa).map(c=>({name:c.name,ipa:c.ipa,place:c.type==='vowel'||c.type==='nasal'}));
 
-async function call(kind,w){
+async function call(kind,w,extra={}){
  const {data}=await supabase.auth.getSession();
  const token=data?.session?.access_token;
  if(!token)throw new Error('Sign in again to generate.');
  const res=await fetch(endpoint,{
   method:'POST',
   headers:{'content-type':'application/json',authorization:`Bearer ${token}`},
-  body:JSON.stringify({kind,gender:genderLine(w),cast:castOf(w),
+  body:JSON.stringify({kind,gender:genderLine(w),cast:castOf(w),...extra,
    word:{word:w.word,article:w.article,ipa:w.ipa,meaning:w.meaning,pos:posOf(w),level:w.level,example:w.example}})
  });
  let body;
@@ -27,3 +27,4 @@ async function call(kind,w){
 
 export const mnemonicFor=w=>call('mnemonic',w);
 export const sentenceFor=w=>call('sentence',w);
+export const explainFor=(w,sentence)=>call('explain',w,{sentence});

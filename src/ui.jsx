@@ -2,12 +2,12 @@ import React,{useState,useEffect,useRef} from 'react';
 import {Volume2} from 'lucide-react';
 import {tokenize,levels,levelBlurb} from './engine';
 
-export function speak(text,notice){
+export function speak(text,notice,rate=.8){
  if(!('speechSynthesis' in window))return notice?.('Speech is unavailable in this browser. Use the IPA guide.');
  const voice=speechSynthesis.getVoices().find(v=>v.lang.startsWith('fr'));
  speechSynthesis.cancel();
  const u=new SpeechSynthesisUtterance(text);
- u.lang='fr-FR';u.rate=.8;
+ u.lang='fr-FR';u.rate=rate;
  if(voice)u.voice=voice;else notice?.('Using your device’s French speech service. Voice availability varies by browser.');
  speechSynthesis.speak(u);
 }

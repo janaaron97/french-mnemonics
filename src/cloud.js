@@ -11,13 +11,14 @@ const stamp=ms=>new Date(Number(ms)||0).toISOString();
 const ms=iso=>iso?Date.parse(iso):0;
 
 export function fromRows({library=[],reviews=[],state=null}){
- const out={...empty,cards:{},notes:{},aiNotes:{},phrases:{},lib:{},known:{}};
+ const out={...empty,cards:{},notes:{},aiNotes:{},phrases:{},notesOn:{},lib:{},known:{}};
  for(const r of library){
   const id=String(r.word_id);
   if(r.known_at)out.known[id]=ms(r.known_at);else out.lib[id]=ms(r.added_at);
   if(r.note)out.notes[id]=r.note;
   if(r.note&&r.note_ai)out.aiNotes[id]=1;
   if(r.sentence)out.phrases[id]={fr:r.sentence,en:r.sentence_en||''};
+  if(r.explain)out.notesOn[id]={text:r.explain,of:r.explain_of||''};
  }
  for(const r of reviews)out.cards[String(r.word_id)]={
   due:ms(r.due),interval:r.interval_days,reviews:r.reviews,last:ms(r.last_reviewed),
@@ -34,9 +35,10 @@ export function fromRows({library=[],reviews=[],state=null}){
 export const libraryRow=(s,id)=>{
  const studying=s.lib[id]!==undefined,known=s.known[id]!==undefined;
  if(!studying&&!known)return null;
- const said=s.phrases[id];
+ const said=s.phrases[id],broke=s.notesOn[id];
  return {word_id:Number(id),note:s.notes[id]||'',note_ai:!!s.aiNotes[id],
   sentence:said?.fr||null,sentence_en:said?.en||null,
+  explain:broke?.text||null,explain_of:broke?.of||null,
   known_at:known?stamp(s.known[id]):null,
   added_at:stamp(known?s.known[id]:s.lib[id])};
 };
@@ -57,7 +59,7 @@ const keysOf=(...maps)=>new Set(maps.flatMap(m=>Object.keys(m||{})));
 
 export function diff(prev,next,prevLevels,nextLevels){
  const upLibrary=[],delLibrary=[],upReviews=[],delReviews=[];
- for(const id of keysOf(prev.lib,prev.known,next.lib,next.known,prev.notes,next.notes,prev.phrases,next.phrases,prev.aiNotes,next.aiNotes)){
+ for(const id of keysOf(prev.lib,prev.known,next.lib,next.known,prev.notes,next.notes,prev.phrases,next.phrases,prev.aiNotes,next.aiNotes,prev.notesOn,next.notesOn)){
   const was=libraryRow(prev,id),now=libraryRow(next,id);
   if(!now){if(was)delLibrary.push(Number(id));continue}
   if(!same(was,now))upLibrary.push(now);
@@ -76,7 +78,7 @@ export const hasContent=s=>!!(Object.keys(s.lib).length||Object.keys(s.known).le
 
 export async function load(userId){
  const [library,reviews,state]=await Promise.all([
-  supabase.from('echo_library').select('word_id,note,note_ai,sentence,sentence_en,known_at,added_at').eq('user_id',userId),
+  supabase.from('echo_library').select('word_id,note,note_ai,sentence,sentence_en,explain,explain_of,known_at,added_at').eq('user_id',userId),
   supabase.from('echo_reviews').select('word_id,due,interval_days,reviews,last_reviewed,clean,close,missed').eq('user_id',userId),
   supabase.from('echo_state').select('xp,rounds,best,cursor,sound,levels,days').eq('user_id',userId).maybeSingle()
  ]);

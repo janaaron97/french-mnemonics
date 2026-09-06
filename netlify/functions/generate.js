@@ -25,6 +25,14 @@ Hard rules:
 - Never mention IPA, phonetics, sounds, letters, spelling, syllables, or the French word itself.
 - End with the gender line you are given, verbatim, as its own sentence.`;
 
+const explainPrompt=(w,sentence)=>`Break down this French sentence for a learner at CEFR level ${w.level}.
+Sentence: "${sentence}"
+The word being studied is "${w.word}" (${w.meaning}).
+Give one short line per word or fixed phrase, in the order they appear, as "word — literal gloss, and what it is doing grammatically".
+Then a final line starting "Note:" covering the one thing most likely to trip a learner here — an agreement, a tense, an elision, a word order quirk, or why "${w.word}" takes the form it does.
+Be concrete and brief. No preamble, no encouragement, no restating the translation.
+Reply as JSON: {"explain":"line\nline\nNote: ..."}`;
+
 const sentencePrompt=w=>`Write ONE natural French example sentence using "${w.word}" (${w.meaning}), suited to CEFR level ${w.level}.
 It must be different from this existing one: "${w.example}"
 Rules: 6-14 words, everyday register, the word appears exactly once, correct grammar and accents.
@@ -65,7 +73,7 @@ exports.handler=async event=>{
   let payload;
   try{payload=JSON.parse(event.body||'{}')}catch{return json(400,{error:'Bad request body.'})}
   const {kind,word,cast=[],gender=''}=payload;
-  if(kind!=='mnemonic'&&kind!=='sentence')return json(400,{error:'Unknown generation kind.'});
+  if(!['mnemonic','sentence','explain'].includes(kind))return json(400,{error:'Unknown generation kind.'});
   if(!word?.word||!word?.meaning)return json(400,{error:'Missing word.'});
 
   // daily cap, counted as the calling user so row-level security still applies
@@ -81,7 +89,13 @@ exports.handler=async event=>{
 
   try{
     let out;
-    if(kind==='sentence'){
+    if(kind==='explain'){
+      const sentence=clean(payload.sentence||word.example);
+      if(!sentence)return json(400,{error:'Missing sentence.'});
+      const {explain}=await ask([{role:'system',content:'You explain French sentences to a learner, plainly and briefly. Reply only as JSON.'},
+        {role:'user',content:explainPrompt(word,sentence)}],'explain');
+      out={explain:String(explain).replace(/\n{3,}/g,'\n\n').trim(),sentence};
+    }else if(kind==='sentence'){
       const {french,english}=await ask([{role:'system',content:'You write natural, grammatical French for a learner. Reply only as JSON.'},
         {role:'user',content:sentencePrompt(word)}],'french');
       if(!clean(french).toLowerCase().includes(word.word.toLowerCase().slice(0,Math.max(3,word.word.length-2))))

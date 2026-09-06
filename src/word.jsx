@@ -2,7 +2,7 @@ import React,{useState,useMemo,useEffect} from 'react';
 import {Volume2,ArrowRight,Check,Plus,X,RotateCcw,Shuffle,Pencil,Trash2,Sparkles,Loader2} from 'lucide-react';
 import {scene,SCENES,alternates,tokenize,schedule,stage,mastery,seen,posOf,MASTERY} from './engine';
 import {Cues,speak} from './ui';
-import {mnemonicFor,sentenceFor} from './generate.js';
+import {mnemonicFor,sentenceFor,explainFor} from './generate.js';
 
 const DAY=86400000;
 const ago=ms=>{const d=Math.floor((Date.now()-ms)/DAY);return d<=0?'today':d===1?'yesterday':d<30?d+' days ago':Math.round(d/30)+' months ago'};
@@ -20,7 +20,7 @@ export default function Word({w,words,state,setState,notice,review,revealed,setR
  const step=stage(card,known),done=mastery(card),total=seen(card);
  const note=state.notes[w.id]||'',ai=!!state.aiNotes[w.id];
  const others=useMemo(()=>alternates(w,words),[w.id,words]);
- const mine=state.phrases[w.id];
+ const mine=state.phrases[w.id],broke=state.notesOn[w.id];
  const sentences=useMemo(()=>[
   ...(mine?[{example:mine.fr,translation:mine.en,from:null,made:true}]:[]),
   {example:w.example,translation:w.translation,from:null},
@@ -52,6 +52,12 @@ export default function Word({w,words,state,setState,notice,review,revealed,setR
   setAlt(0);
  });
  const dropSentence=()=>setState(s=>{const phrases={...s.phrases};delete phrases[w.id];return {...s,phrases}});
+ const writeBreakdown=()=>run('explain',async()=>{
+  const {explain,sentence}=await explainFor(w,shown.example);
+  setState(s=>({...s,notesOn:{...s.notesOn,[w.id]:{text:explain,of:sentence}},
+   lib:s.known[w.id]?s.lib:{...s.lib,[w.id]:s.lib[w.id]||Date.now()}}));
+ });
+ const dropBreakdown=()=>setState(s=>{const notesOn={...s.notesOn};delete notesOn[w.id];return {...s,notesOn}});
  const collect=()=>setState(s=>({...s,lib:{...s.lib,[w.id]:Date.now()}}));
  const fileKnown=()=>{setState(s=>{const lib={...s.lib};delete lib[w.id];
   return {...s,known:{...s.known,[w.id]:Date.now()},lib}});notice(`“${w.word}” marked known.`)};
@@ -124,12 +130,17 @@ export default function Word({w,words,state,setState,notice,review,revealed,setR
       {busy==='sentence'?<Loader2 size={14} className="spin"/>:<Sparkles size={14}/>} {mine?'Write another':'Write one with AI'}</button>
      <button onClick={()=>setAlt(a=>a+1)} disabled={sentences.length<2}>
       <RotateCcw size={14}/> {sentences.length<2?'only one in the corpus':'Next sentence'}</button>
+     <button onClick={broke?dropBreakdown:writeBreakdown} disabled={!!busy} className={broke?'':'ai'}>
+      {busy==='explain'?<Loader2 size={14} className="spin"/>:broke?<Trash2 size={14}/>:<Sparkles size={14}/>}
+      {broke?'Drop breakdown':'Explain it'}</button>
     </div></div>
    {failed&&<p className="gen-error" role="alert">{failed}</p>}
    <div className="sentence-row">
     <button className="say" onClick={()=>speak(shown.example,notice)} aria-label="Hear it"><Volume2 size={17}/></button>
     <div><p lang="fr">{shown.example}</p><span>{shown.translation}</span></div>
    </div>
+   {broke&&<div className="breakdown">{broke.text}</div>}
+   {broke&&broke.of!==shown.example&&<p className="panel-foot warn-foot">This breakdown was written for “{broke.of}”.</p>}
    <p className="panel-foot">
     {`${alt%sentences.length+1} of ${sentences.length} · `}
     {shown.made?'written by AI for this word':shown.from?`borrowed from “${shown.from.word}”`:'the corpus sentence for this word'}
