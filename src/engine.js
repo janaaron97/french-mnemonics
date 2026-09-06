@@ -259,7 +259,14 @@ export function blank(w){
 }
 const bare=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/œ/g,'oe').replace(/æ/g,'ae');
 const tidy=s=>String(s).trim().toLowerCase().normalize('NFC').replace(/[\u2019\u02bc]/g,"'").replace(/\s+/g,' ');
-export function card(w){
+// The prompt a mode puts in front of you. 'meaning' asks for the English,
+// 'compose' asks for a whole sentence and is graded elsewhere; both still carry
+// an answer and a length so the shared round machinery works unchanged.
+export function card(w,mode){
+ if(mode==='english')return {id:w.id,word:w,kind:'meaning',before:'',after:'',
+  answer:w.meaning,accepts:meanings(w),length:String(w.meaning).length};
+ if(mode==='compose')return {id:w.id,word:w,kind:'compose',before:'',after:'',
+  answer:w.word,accepts:[w.word],length:w.word.length};
  const cut=blank(w);
  const answer=cut?cut.answer:w.word;
  return {id:w.id,word:w,kind:cut?'cloze':'recall',before:cut?.before||'',after:cut?.after||'',answer,
@@ -271,6 +278,55 @@ export function check(typed,accepts){
  const wanted=accepts.map(tidy);
  if(wanted.includes(given))return 'exact';
  if(wanted.some(a=>bare(a)===bare(given)))return 'accent';
+ return 'wrong';
+}
+// English answers are free prose, and the corpus packs alternatives into one
+// string: "to know (facts · how to do something)". Accept any alternative,
+// with or without the parenthetical, with or without a leading article.
+const flat=s=>tidy(s).replace(/[^\p{L}\p{N}\s']/gu,' ').replace(/\s+/g,' ').trim();
+const unparen=s=>String(s).replace(/\([^)]*\)/g,' ');
+const opener=/^(?:to|the|a|an)\s+/;
+export function meanings(w){
+ const out=new Set(),add=t=>{
+  const v=flat(t);
+  if(!v)return;
+  out.add(v);
+  const short=v.replace(opener,'');
+  if(short)out.add(short);
+ };
+ const whole=String(w.meaning||'');
+ for(const text of [whole,unparen(whole)]){
+  add(text);
+  for(const part of text.split(/[·;,]| or /))add(part);
+ }
+ return [...out].filter(Boolean);
+}
+// Damerau-Levenshtein, so a swapped pair counts as the one slip it is rather
+// than two. Anything past two changes is a different answer, not a typo.
+function edits(a,b){
+ if(a===b)return 0;
+ if(Math.abs(a.length-b.length)>2)return 3;
+ let two=null,prev=Array.from({length:b.length+1},(_,j)=>j);
+ for(let i=1;i<=a.length;i++){
+  const row=[i];
+  for(let j=1;j<=b.length;j++){
+   row[j]=Math.min(prev[j]+1,row[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+   if(two&&i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])row[j]=Math.min(row[j],two[j-2]+1);
+  }
+  two=prev;prev=row;
+ }
+ return prev[b.length];
+}
+// 'near' is the English counterpart of 'accent': right idea, one slip. It
+// grades as close, so it keeps the card moving without advancing mastery.
+export function checkMeaning(typed,accepts){
+ const given=flat(typed);
+ if(!given)return 'empty';
+ if(accepts.includes(given))return 'exact';
+ const stem=given.replace(opener,'');
+ if(accepts.some(a=>a.replace(opener,'')===stem))return 'exact';
+ if(accepts.some(a=>bare(a)===bare(given)))return 'exact';
+ if(accepts.some(a=>edits(bare(a),bare(given))<=(Math.min(a.length,given.length)>6?2:1)))return 'near';
  return 'wrong';
 }
 const rank=Object.fromEntries(levels.map((l,i)=>[l,i]));
@@ -299,7 +355,9 @@ export function queue({words,mode='discover',progress,now=Date.now(),size=10}){
  const due=words.filter(w=>!known[w.id]&&cards[w.id]&&cards[w.id].due<=now)
   .sort((a,b)=>cards[a.id].due-cards[b.id].due);
  if(mode==='review')return due.slice(0,size);
- if(mode==='library')return words.filter(w=>lib[w.id]&&!known[w.id])
+ // Everything that studies your own shelf draws from the same pool, due first:
+ // the cloze round, the English recall round, and the sentence-writing round.
+ if(mode==='library'||mode==='english'||mode==='compose')return words.filter(w=>lib[w.id]&&!known[w.id])
   .sort((a,b)=>(cards[a.id]?cards[a.id].due:now+1)-(cards[b.id]?cards[b.id].due:now+1)).slice(0,size);
 
  // There is no stored resume point: the next new word is simply the first one

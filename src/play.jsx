@@ -1,29 +1,42 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
-import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight} from 'lucide-react';
-import {queue,card,check,sentenceIds,applyGrade,addDay,mastery,streak as dayStreak,MASTERY,posOf} from './engine';
+import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift} from 'lucide-react';
+import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,mastery,streak as dayStreak,MASTERY,posOf} from './engine';
 import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
-import {explainFor} from './generate.js';
+import {explainFor,composeFor} from './generate.js';
 
 const ROUND=[7,12,20];
 const ACCENTS=['é','è','ê','à','â','î','ï','ô','û','ù','ç','œ'];
 const decks=[
  ['discover',Compass,'Discover','A1 → C1 in order, with due reviews woven in'],
  ['library',Layers,'My library','Words you have collected, due ones first'],
- ['review',History,'Due reviews','Everything the schedule has brought back']
+ ['review',History,'Due reviews','Everything the schedule has brought back'],
+ ['english',Languages,'Meaning check','Your studying words — type the English'],
+ ['compose',PenLine,'Write a sentence','Use a word you are studying; AI marks it']
 ];
+// Each sentence costs a marking call, so a compose round is deliberately short.
+const CAP={compose:5};
+const BONUS=75;
 const points=streak=>100+Math.min(streak,8)*25;
 const words_=text=>String(text).split(/(\s+)/).map((part,i)=>
  /^\s+$/.test(part)||!part?part:<span className="tok" key={i}>{part}</span>);
-function Blank({c,draft,setDraft,field,result,tone3,teaching}){
- const wide=Math.max(c.length,draft.length,3)+1;
- return <input ref={field} className={'blank '+(result?tone3:'')} style={{width:wide+'ch'}}
-  value={result?c.answer:draft} onChange={e=>setDraft(e.target.value)} readOnly={!!result} autoFocus
-  lang="fr" enterKeyHint="go" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-  placeholder={teaching?c.answer:''} aria-label="Type the missing word"/>;
+function Blank({c,draft,setDraft,field,result,tone3,teaching,submit}){
+ // An English meaning can be a whole phrase, so it gets a field that wraps —
+ // otherwise TEACH ME shows the first half of the answer and hides the rest.
+ // A textarea does not submit on Enter by itself, so put that back by hand —
+ // and stop the key there, or the window handler that advances a graded card
+ // sees the same press and skips straight past the verdict.
+ const shared={ref:field,value:result?c.answer:draft,onChange:e=>setDraft(e.target.value),
+  readOnly:!!result,autoFocus:true,enterKeyHint:'go',autoComplete:'off',autoCorrect:'off',
+  autoCapitalize:'off',spellCheck:false,placeholder:teaching?c.answer:''};
+ if(c.kind==='meaning')return <textarea {...shared} rows={2} lang="en"
+  className={'blank prose '+(result?tone3:'')} aria-label="Type the English meaning"
+  onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.stopPropagation();submit()}}}/>;
+ return <input {...shared} lang="fr" style={{width:Math.max(c.length,draft.length,3)+1+'ch'}}
+  className={'blank '+(result?tone3:'')} aria-label="Type the missing word"/>;
 }
 const grades={clean:'good',close:'hard',missed:'again'};
 // Mastery only advances on a word you spelled exactly, with no letters uncovered.
-const judge=(result,assisted)=>result==='wrong'?'missed':result==='accent'||assisted?'close':'clean';
+const judge=(result,assisted)=>result==='wrong'?'missed':result==='accent'||result==='near'||assisted?'close':'clean';
 
 export default function Play({words,state,setState,picked,setPicked,notice,openWord,launch,onLaunched}){
  const [stage,setStage]=useState('setup'),[size,setSize]=useState(12),[mode,setMode]=useState('discover');
@@ -35,12 +48,16 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   [m,queue({words,mode:m,progress:state,size:1e5}).length])),[words,state]);
 
  const start=(m=mode)=>{
-  const list=queue({words,mode:m,progress:state,size});
+  const list=queue({words,mode:m,progress:state,size:Math.min(size,CAP[m]||size)});
   if(!list.length)return notice(m==='review'?'Nothing is due yet. Play a discover round to start your schedule.'
-   :m==='library'?'Your library is empty. Sort some words, or play a discover round to collect some.'
-   :'Every word in the corpus is marked known.');
+   :m==='discover'?'Every word in the corpus is marked known.'
+   :'Your library is empty. Sort some words, or play a discover round to collect some.');
+  // The bonus word is the next card in the round, so it is always something you
+  // are studying and something you will meet again in a moment.
+  const deck=list.map(w=>card(w,m));
+  if(m==='compose')deck.forEach((c,i)=>{c.bonus=deck.length>1?deck[(i+1)%deck.length].word:null});
   clearTimeout(timer.current);setMode(m);setHint(false);setDraft('');setShown(0);setTeaching(false);
-  setS({deck:list.map(card),i:0,score:0,streak:0,best:0,right:0,answered:0,collected:0,gain:0,missed:[],done:[],taughtCount:0,startedAt:Date.now(),result:null,typed:'',mode:m});
+  setS({deck,i:0,score:0,streak:0,best:0,right:0,answered:0,collected:0,gain:0,bonuses:0,missed:[],done:[],taughtCount:0,startedAt:Date.now(),result:null,typed:'',mode:m});
   setStage('play');
  };
 
@@ -58,14 +75,18 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   setS({...v,i:v.i+1,result:null,typed:''});
  };
 
- const settle=(result,typed)=>{
+ const settle=(result,typed,review=null)=>{
   const v=live.current;
   if(!v||v.result)return;
   const c=v.deck[v.i],now=Date.now();
-  const outcome=teaching?'missed':judge(result,shown>0),ok=outcome!=='missed';
-  const gain=outcome==='clean'?points(v.streak):outcome==='close'?Math.round(points(v.streak)/2):0;
+  const outcome=review?review.outcome:teaching?'missed':judge(result,shown>0),ok=outcome!=='missed';
+  const earned=outcome==='clean'?points(v.streak):outcome==='close'?Math.round(points(v.streak)/2):0;
+  const gain=earned+(review?.usedBonus?BONUS:0);
   const climbed=outcome==='clean'&&!state.known[c.id]&&(state.cards[c.id]?.clean||0)+1>=MASTERY;
-  const ids=[...new Set([c.id,...sentenceIds(c.word.example,words)])];
+  // Only the sentence rounds put a sentence in front of you, so only they have
+  // words worth harvesting out of it.
+  const ids=c.kind==='cloze'||c.kind==='recall'
+   ?[...new Set([c.id,...sentenceIds(c.word.example,words)])]:[c.id];
   const fresh=ids.filter(id=>!state.lib[id]&&!state.known[id]).length;
   setState(st=>{
    const lib={...st.lib};
@@ -74,18 +95,41 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    return {...next,xp:next.xp+gain};
   });
   const streak=ok?v.streak+1:0;
-  setS({...v,result,outcome,typed,gain,taught:teaching,mastered:climbed,score:v.score+gain,streak,best:Math.max(v.best,streak),
+  setS({...v,result,outcome,typed,gain,review,taught:teaching,mastered:climbed,score:v.score+gain,streak,best:Math.max(v.best,streak),
    answered:v.answered+1,right:v.right+(outcome==='clean'?1:0),collected:v.collected+fresh,
-   taughtCount:v.taughtCount+(teaching?1:0),done:[...v.done,{card:c,outcome}],
+   bonuses:v.bonuses+(review?.usedBonus?1:0),
+   taughtCount:v.taughtCount+(teaching?1:0),done:[...v.done,{card:c,outcome,typed,review}],
    missed:ok?v.missed:[...v.missed,c.word]});
   tone(outcome==='clean'?[[660,0,.09],[880,.08,.14]]:outcome==='close'?[[620,0,.1],[700,.09,.12]]:[[190,0,.18,'sawtooth']],state.sound);
   buzz(ok?18:[28,40,28]);
+ };
+ const [grading,setGrading]=useState(false);
+ // The sentence round is marked by the model, but whether the two words are
+ // actually there is decided here first, off the inflection index, and only
+ // upgraded by the model — it can see conjugations the index does not carry.
+ const mark=async()=>{
+  const v=live.current;
+  if(!v||v.result||grading)return;
+  const c=v.deck[v.i],text=draft.trim();
+  if(!text)return field.current?.focus();
+  setGrading(true);
+  try{
+   const seen=sentenceIds(text,words);
+   const said=await composeFor(c.word,text,c.bonus);
+   const usedWord=seen.includes(c.id)||said.used===true;
+   const usedBonus=!!c.bonus&&(seen.includes(c.bonus.id)||said.bonus===true);
+   const outcome=!usedWord?'missed':said.score>=4?'clean':said.score>=3?'close':'missed';
+   settle('marked',text,{...said,usedWord,usedBonus,outcome});
+  }catch(err){notice(err?.message||'Could not mark that sentence.')}
+  setGrading(false);
  };
  const submit=e=>{
   e?.preventDefault?.();
   const v=live.current;
   if(!v||v.result)return;
-  const verdict=check(draft,v.deck[v.i].accepts);
+  const c=v.deck[v.i];
+  if(c.kind==='compose')return mark();
+  const verdict=c.kind==='meaning'?checkMeaning(draft,c.accepts):check(draft,c.accepts);
   if(verdict==='empty')return field.current?.focus();
   settle(verdict,draft);
  };
@@ -141,6 +185,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  if(stage==='done')return <Summary {...{s,setStage,start,setState,state,openWord,notice,explain,explaining}}/>;
 
  const c=s.deck[s.i],result=s.result,ok=result&&s.outcome!=='missed';
+ const spellable=c.kind==='cloze'||c.kind==='recall';
  const cleanSoFar=mastery(state.cards[c.id]);
  const filled=result?c.answer:draft;
  const tone3=result?(s.outcome==='clean'?'right':s.outcome==='close'?'close':'wrong'):'gap';
@@ -158,16 +203,36 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    <div className="arena-stage">
    {c.kind==='cloze'
     ? <p className="prompt" lang="fr">{words_(c.before)}<Blank {...{c,draft,setDraft,field,result,tone3,teaching}}/>{words_(c.after)}</p>
+    : c.kind==='meaning'
+    ? <div className="prompt-recall">
+       <span className="arena-eyebrow">WHAT DOES THIS MEAN</span>
+       <p className="prompt"><span lang="fr">{c.word.article||c.word.word}</span>
+        <button type="button" className="say" onClick={()=>speak(c.word.word,notice)} aria-label="Hear it"><Volume2 size={17}/></button></p>
+       <Blank {...{c,draft,setDraft,field,result,tone3,teaching,submit}}/>
+      </div>
+    : c.kind==='compose'
+    ? <div className="prompt-recall">
+       <span className="arena-eyebrow">WRITE A SENTENCE USING</span>
+       <p className="prompt"><span lang="fr">{c.word.article||c.word.word}</span>
+        <button type="button" className="say" onClick={()=>speak(c.word.word,notice)} aria-label="Hear it"><Volume2 size={17}/></button></p>
+       <p className="prompt-gloss">{c.word.meaning} · {c.word.level}</p>
+       {c.bonus&&<div className="bonus-chip"><Gift size={14}/> bonus <b lang="fr">{c.bonus.article||c.bonus.word}</b>
+        <em>{c.bonus.meaning}</em><span>+{BONUS}</span></div>}
+       <textarea ref={field} className={'compose-field '+(result?tone3:'')} lang="fr" rows={3}
+        value={result?s.typed:draft} onChange={e=>setDraft(e.target.value)} readOnly={!!result} autoFocus
+        autoComplete="off" autoCorrect="off" autoCapitalize="sentences" spellCheck={false}
+        placeholder="Une phrase en français…" aria-label="Write your sentence in French"/>
+      </div>
     : <div className="prompt-recall">
        <span className="arena-eyebrow">WRITE THE FRENCH FOR</span>
        <p className="prompt">“{c.word.meaning}”<Blank {...{c,draft,setDraft,field,result,tone3,teaching}}/></p>
       </div>}
-   <p className="prompt-gloss">{c.kind==='cloze'?c.word.translation:result?c.word.example:''}</p>
+   <p className="prompt-gloss">{c.kind==='cloze'?c.word.translation:c.kind==='recall'&&result?c.word.example:''}</p>
 
    {!result&&<div className="accents">{ACCENTS.map(ch=><button key={ch} type="button" tabIndex={-1} onClick={()=>accent(ch)}>{ch}</button>)}</div>}
    <div className="mastery-dots" aria-label={'Mastery '+cleanSoFar+' of '+MASTERY}>
     {Array.from({length:MASTERY},(_,i)=><i key={i} className={i<cleanSoFar?'on':''}/>)}</div>
-   {shown>0&&!result&&<div className="letters" aria-label={'First '+shown+' letters'}>
+   {shown>0&&!result&&spellable&&<div className="letters" aria-label={'First '+shown+' letters'}>
     {[...c.answer].map((ch,i)=><span key={i} className={i<shown?'on':''}>{i<shown?ch:'·'}</span>)}</div>}
    {hint&&!result&&<div className="arena-hint"><Cues ipa={c.word.ipa} size="sm"/><small>/{c.word.ipa}/</small></div>}
    {teaching&&!result&&<p className="assist-note">Copy it out. This one counts as a miss either way — that is what brings it back soon.</p>}
@@ -180,13 +245,35 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
     <button type="button" onClick={markKnown}><Check size={16}/> mark as known</button>
    </div>}
 
-   {result&&<div className="verdict">
+   {result&&c.kind==='compose'&&s.review&&<div className="mark">
+    <div className="mark-head">
+     <strong className={'mark-score s'+s.review.score}>{s.review.score}<i>/5</i></strong>
+     <div><b>{s.review.verdict||(s.review.score>=4?'Correct.':'Needs work.')}</b>
+      <span>{!s.review.usedWord?`“${c.word.word}” never appeared, so this one counts as a miss.`
+       :s.review.usedBonus?`+${s.gain}, including ${BONUS} for working in “${c.bonus.word}”.`
+       :c.bonus?`+${s.gain}. No bonus — “${c.bonus.word}” went unused.`:`+${s.gain}.`}</span></div>
+    </div>
+    {s.review.notes&&<div className="breakdown">{s.review.notes}</div>}
+    {s.review.corrected&&<div className="mark-fix">
+     <span className="arena-eyebrow">{s.review.corrected.trim()===s.typed.trim()?'AS YOU WROTE IT':'CORRECTED'}</span>
+     <p lang="fr">{s.review.corrected}
+      <button type="button" className="say" onClick={()=>speak(s.review.corrected,notice)} aria-label="Hear it"><Volume2 size={16}/></button></p>
+     {s.review.english&&<em>{s.review.english}</em>}</div>}
+    {!!s.review.better?.length&&<div className="mark-fix">
+     <span className="arena-eyebrow">OTHER WAYS TO SAY IT</span>
+     {s.review.better.map((b,i)=><p key={i} lang="fr">{b}
+      <button type="button" className="say" onClick={()=>speak(b,notice)} aria-label="Hear it"><Volume2 size={16}/></button></p>)}</div>}
+    {s.mastered&&<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>}
+   </div>}
+
+   {result&&c.kind!=='compose'&&<div className="verdict">
     <div className="verdict-head">
      <strong>{s.outcome==='clean'?`+${s.gain}`:s.outcome==='close'?`Almost · +${s.gain}`:s.taught?'Typed it out':'Not this time'}</strong>
      <button type="button" className="say" onClick={()=>speak(c.word.example,notice)} aria-label="Hear the sentence"><Volume2 size={17}/></button>
      <span lang="fr">{c.word.article||c.word.word} <i>/{c.word.ipa}/</i> — {c.word.meaning} <i>· {c.word.level}</i></span>
     </div>
     {result==='accent'&&<span className="slip">You wrote “{s.typed.trim()}” — accents are part of the spelling.</span>}
+    {result==='near'&&<span className="slip">You wrote “{s.typed.trim()}” — close enough to count, not close enough to be clean.</span>}
     {result==='exact'&&s.outcome==='close'&&!s.taught&&<span className="slip">Right, but with letters uncovered — mastery holds at {cleanSoFar}/{MASTERY}.</span>}
     {result==='wrong'&&!s.taught&&!!s.typed.trim()&&<span className="slip">You wrote “{s.typed.trim()}”.</span>}
     {s.mastered
@@ -201,8 +288,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
 
    <div className="arena-bar">
     <div className="tools" hidden={!!result}>
-     <button type="button" className="tool" onClick={()=>setShown(n=>n+1)} disabled={!!result||shown>=c.length-1}
-      title="Reveal a letter" aria-label="Reveal a letter"><HelpCircle size={20}/></button>
+     {spellable&&<button type="button" className="tool" onClick={()=>setShown(n=>n+1)} disabled={!!result||shown>=c.length-1}
+      title="Reveal a letter" aria-label="Reveal a letter"><HelpCircle size={20}/></button>}
      <button type="button" className={'tool'+(hint?' on':'')} onClick={()=>setHint(h=>!h)} disabled={!!result}
       title="Sound hint" aria-label="Sound hint"><Ear size={20}/></button>
      <button type="button" className="tool" onClick={markKnown} disabled={!!result}
@@ -210,10 +297,13 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
     </div>
     {result
      ?<div className="go-stack">
-       {!state.notesOn[c.id]&&<button type="button" className="go outline" disabled={!!explaining}
+       {c.kind!=='compose'&&!state.notesOn[c.id]&&<button type="button" className="go outline" disabled={!!explaining}
         onClick={()=>explain(c.word)}>{explaining?<Loader2 size={16} className="spin"/>:null}EXPLAIN</button>}
        <button type="button" className="go" onClick={next}>NEXT</button>
       </div>
+     :c.kind==='compose'
+       ?<button type="submit" className="go" disabled={grading||!draft.trim()}>
+         {grading?<><Loader2 size={17} className="spin"/> MARKING</>:'HAND IT IN'}</button>
      :draft.trim()||teaching
        ?<button type="submit" className="go">CHECK</button>
        :<button type="button" className="go teach" onClick={teach}><GraduationCap size={18}/> TEACH ME</button>}
@@ -279,19 +369,30 @@ function Summary({s,setStage,start,setState,state,openWord,notice,explain,explai
    <article><strong className="bad">{s.answered-s.right}</strong><span><X size={13}/> Not clean</span></article>
    <article><strong>{s.taughtCount}</strong><span><GraduationCap size={13}/> Teach me</span></article>
    <article><strong>{acc}%</strong><span><Target size={13}/> Accuracy</span></article>
+   {!!s.bonuses&&<article><strong className="ok">{s.bonuses}</strong><span><Gift size={13}/> Bonus words</span></article>}
   </div>
 
-  <h2>Sentences</h2>
-  <div className="sentence-list">{s.done.map(({card:c,outcome},i)=>{
+  <h2>{s.mode==='compose'?'Your sentences':s.mode==='english'?'Words':'Sentences'}</h2>
+  <div className="sentence-list">{s.done.map(({card:c,outcome,typed,review},i)=>{
    const w=c.word,isOpen=open===i;
    return <div key={i} className={'sent'+(isOpen?' open':'')}>
     <button className="sent-head" onClick={()=>setOpen(o=>o===i?null:i)} aria-expanded={isOpen}>
      <span className={'mark mark-'+outcome}>{outcome==='missed'?<X size={16}/>:<Check size={16}/>}</span>
      <span className="sent-text">
-      <span lang="fr">{c.kind==='cloze'?<>{c.before}<b>{c.answer}</b>{c.after}</>:<b>{w.word}</b>}</span>
-      <em>{c.kind==='cloze'?w.translation:w.meaning}</em></span>
+      <span lang="fr">{c.kind==='cloze'?<>{c.before}<b>{c.answer}</b>{c.after}</>
+       :c.kind==='compose'?(typed||<i>nothing written</i>):<b>{w.word}</b>}</span>
+      <em>{c.kind==='compose'?<><b lang="fr">{w.word}</b> — {w.meaning}{review?` · ${review.score}/5`:''}</>
+       :c.kind==='cloze'?w.translation:w.meaning}</em></span>
      <ArrowRight size={16} className="chev"/>
     </button>
+    {isOpen&&c.kind==='compose'&&review&&<div className="mark-recap">
+     {review.notes&&<div className="breakdown">{review.notes}</div>}
+     {review.corrected&&<p lang="fr"><b>{review.corrected}</b>
+      <button className="say" onClick={()=>speak(review.corrected,notice)} aria-label="Hear it"><Volume2 size={15}/></button></p>}
+     {review.english&&<em>{review.english}</em>}
+     {review.better?.map((b,k)=><p key={k} lang="fr">{b}
+      <button className="say" onClick={()=>speak(b,notice)} aria-label="Hear it"><Volume2 size={15}/></button></p>)}
+    </div>}
     {isOpen&&<div className="sent-tools">
      <button onClick={()=>speak(w.example,notice)} aria-label="Hear it"><Volume2 size={17}/></button>
      <button onClick={()=>speak(w.example,notice,.5)} aria-label="Hear it slowly"><span className="slow">.5x</span></button>

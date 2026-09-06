@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -261,4 +261,43 @@ test('recording a day is idempotent and stays sorted',()=>{
  const grid=lastDays(days,4,'2026-09-06');
  assert.deepEqual(grid.map(d=>d.on),[false,true,false,true]);
  assert.equal(grid.length,4);
+});
+
+test('an English meaning accepts every alternative the corpus packs into it',()=>{
+ const know=meanings({meaning:'to know (facts · how to do something)'});
+ for(const right of ['know','to know','How To Do Something','  to know  '])
+  assert.equal(checkMeaning(right,know),'exact',right);
+ assert.equal(checkMeaning('to kno',know),'near','a dropped letter is a typo');
+ assert.equal(checkMeaning('knwo',know),'near','a swapped pair is a typo');
+ assert.equal(checkMeaning('to eat',know),'wrong');
+ assert.equal(checkMeaning('   ',know),'empty');
+ const spend=meanings({meaning:'to pass · to spend (time)'});
+ for(const right of ['to pass','spend','to spend time'])assert.equal(checkMeaning(right,spend),'exact',right);
+ assert.equal(checkMeaning('the house',meanings({meaning:'the house'})),'exact');
+ assert.equal(checkMeaning('house',meanings({meaning:'the house'})),'exact','a leading article is optional');
+ // every entry must yield at least one acceptable answer, or the mode is unplayable
+ for(const w of words)assert.ok(meanings(w).length,'no answer for '+w.word+': '+w.meaning);
+ for(const w of words.slice(0,800))assert.equal(checkMeaning(w.meaning,meanings(w)),'exact',w.word);
+});
+test('each mode builds the card it needs',()=>{
+ const w=words.find(x=>x.word==='vache');
+ const en=card(w,'english');
+ assert.equal(en.kind,'meaning');
+ assert.equal(en.answer,w.meaning);
+ assert.ok(en.accepts.length);
+ const comp=card(w,'compose');
+ assert.equal(comp.kind,'compose');
+ assert.equal(comp.answer,w.word);
+ assert.ok(['cloze','recall'].includes(card(w).kind),'the default card is unchanged');
+ assert.deepEqual(card(w,'discover'),card(w));
+});
+test('the studying modes all draw from the library, due first',()=>{
+ const now=1e12;
+ const progress={...empty,lib:{2:1,5:1,9:1},known:{5:1},
+  cards:{9:{due:now-1000,interval:1,reviews:1},2:{due:now+9e6,interval:3,reviews:1}}};
+ for(const mode of ['library','english','compose']){
+  const list=queue({words,mode,progress,now,size:10});
+  assert.deepEqual(list.map(w=>w.id),[9,2],mode+' should be due-first, and skip known words');
+ }
+ assert.deepEqual(queue({words,mode:'english',progress:{...empty},now,size:10}),[],'an empty library plays nothing');
 });

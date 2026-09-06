@@ -1,6 +1,6 @@
 # Écho — French sound palace
 
-A React vocabulary trainer ready for Netlify, backed by Supabase for accounts and sync. Includes 5,500 unique French entries with IPA, meanings, example sentences, source-estimated A1–C1 levels, reusable pronunciation mnemonics, a typed cloze game, swipe triage across the whole A1–C1 range, a personal word library, personal scene editing, spaced repetition that syncs across your devices, vocabulary search, a sound reference atlas, and JSON progress export/import.
+A React vocabulary trainer ready for Netlify, backed by Supabase for accounts and sync. Includes 5,500 unique French entries with IPA, meanings, example sentences, source-estimated A1–C1 levels, reusable pronunciation mnemonics, a typed cloze game, an English recall game, an AI-marked sentence-writing game, swipe triage across the whole A1–C1 range, a personal word library, personal scene editing, spaced repetition that syncs across your devices, vocabulary search, a sound reference atlas, and JSON progress export/import.
 
 ## Run
 
@@ -60,15 +60,17 @@ Each card also shows the answer's letter count, its running mastery, an optional
 
 Answering a card puts **every word of that sentence** into your library, not just the target. Sentence words are matched back to corpus entries with a rule-based inflection table — regular `-er`/`-ir`/`-re` endings, noun and adjective agreement, elisions such as `j'`/`l'`/`qu'`, and about fifty hand-written irregular verbs. Canonical entries always win over generated forms, so a real headword is never shadowed by another word's inflection. It is a heuristic, not a parser: rare forms are missed, and a look-alike form can attach to the wrong lemma.
 
-Three decks feed a round:
+Five decks feed a round:
 
-- **Discover** is the progression. It walks the entire corpus **A1 → C1**, and inside a level in frequency order, resuming after the last new word it served. The level range does not narrow it — that range is a filter for sorting and browsing, not a cap on what you learn.
+- **Discover** is the progression. It walks the entire corpus **A1 → C1**, and inside a level in frequency order. The level range does not narrow it — that range is a filter for sorting and browsing, not a cap on what you learn.
 - **My library** draws only from words you have collected, due ones first. This is where a curated list belongs.
 - **Due reviews** draws whatever the schedule has brought back around, oldest first.
+- **Meaning check** runs the other direction: it shows a word you are studying and asks for the English.
+- **Write a sentence** asks you to use a word you are studying in a sentence of your own, and has the model mark it.
 
 Discover also **weaves in anything due for review**, spread through the round rather than blocked at one end, taking at most half the cards so progression never stalls behind a review backlog. A consequence worth knowing: words already in your schedule come back regardless of level, so if higher-level words got into the schedule earlier they will keep appearing until they are learned, and the mix settles back to the ladder as they clear.
 
-The resume point is stored as the id of the last **new** word served — a woven review never moves it — and is resolved by rank rather than by position, so a word you later mark known does not send progression back to the start. Every deck skips words marked known. You can mark a word known mid-round with **I know this**, which drops it from the current deck and the library, or from the round summary.
+There is no stored resume point. The next new word is simply the first one on the ladder you have neither met nor retired, so answering a card or marking one known moves progression on by itself — nothing to drift out of step and nothing to migrate. Every deck skips words marked known. You can mark a word known mid-round with **I know this**, which drops it from the current deck and the library, or from the round summary.
 
 **Sort** is one-gesture triage over the whole selected range. Swipe or drag right to add a word to your library, left to mark it known, down to skip labelling so it returns in a later session. Arrow keys do the same on a keyboard, `U` undoes the last card, and buttons do the same for anyone not using gestures.
 
@@ -85,6 +87,14 @@ Every answer is filed as exactly one of three outcomes, in the game and on the L
 **Mastery is the count of clean answers, out of ten.** Reach ten and the word retires itself into your known words, leaves your library, and stops appearing in rounds. Only clean answers move it: an accent slip or a letter hint still scores and still schedules the word, but the counter holds where it is, and the card says so. Mastery never falls — a bad answer costs you the schedule, not your progress.
 
 Alongside mastery each word carries an SRS **stage** read off its interval: New, Learning (interval 0, just missed or just started), Familiar (1–6 days), Strong (7–20), Locked in (21+), and Known.
+
+### The two modes that use your own words
+
+**Meaning check** and **Write a sentence** both draw from your library, due words first, and both grade into the same schedule and the same mastery counter as a cloze round.
+
+Meaning check shows the French and asks for the English. Corpus meanings pack their alternatives into one string — `to know (facts · how to do something)` — so any alternative counts, with or without the parenthetical and with or without a leading `to`/`the`/`a`. A single-character slip, transpositions included, scores as **close**: you keep the points and the schedule moves, but mastery holds, and the card says so. There is no letter-by-letter reveal here, because the answer is a phrase rather than a spelling; **teach me** shows the whole thing to copy out instead.
+
+Write a sentence gives you one of your words and a **bonus word** — the next card in the round, so it is always something you are studying — and sends what you write to the model for marking. It comes back as a score out of five, one line naming what decided it, a line per problem, the smallest correction that makes the sentence right with its English, and up to two more idiomatic ways to say the same thing. Four or five is clean, three is close, below that is a miss, and a sentence that never uses the target word is a miss whatever the score. Whether the two words are actually present is decided locally first, off the same inflection index the cloze rounds use, and only upgraded by the model, which can see conjugations the index does not carry. Each sentence costs one generation call, so the round is capped at five regardless of the round-length setting. The marking is not stored — it lives in the round and its summary.
 
 **Library** is the dedicated view of your own words: studying, known, or everything you have met, sortable by weakest first, due, recently added, or alphabetically, with search, an optional level filter, and per-word actions to mark known, restore to studying, or remove entirely. Removing a word also discards its review schedule.
 
@@ -125,4 +135,4 @@ Game answers feed the same schedule as the Learn tab: a correct answer counts as
 - Vocabulary knowledge alone does not constitute C1 proficiency. The dataset omits some function words and is not a complete language course.
 - Fonts load from Google Fonts with local fallbacks. Audio uses the browser's speech service and may require internet. The vocabulary, mnemonics, and clozes are all generated in the browser from bundled data; Supabase stores only your account and your progress.
 
-Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, review scheduling, inflected sentence-word matching, cloze construction and its corpus-wide coverage, accepted answers and letter counts, typed-answer checking and its accent tolerance, session queue filtering, and backup migration and rejection. Mastery has its own coverage: that each grade lands in exactly one outcome bucket, that ten clean answers retire a word while accent slips and misses do not, that a graded word joins the library unless already known, and that stages follow the interval. A separate suite covers the sync layer: the state-to-row mapping in both directions, and the diff that decides what gets written, including that an unchanged state writes nothing and that removing a word deletes from both tables. A production build is also checked. Browser interaction tests are not included.
+Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, review scheduling, inflected sentence-word matching, cloze construction and its corpus-wide coverage, accepted answers and letter counts, typed-answer checking and its accent tolerance, English answer matching against every alternative a corpus meaning packs in — including that all 5,500 entries yield at least one accepted answer — per-mode card construction, session queue filtering, and backup migration and rejection. Mastery has its own coverage: that each grade lands in exactly one outcome bucket, that ten clean answers retire a word while accent slips and misses do not, that a graded word joins the library unless already known, and that stages follow the interval. A separate suite covers the sync layer: the state-to-row mapping in both directions, and the diff that decides what gets written, including that an unchanged state writes nothing and that removing a word deletes from both tables. A production build is also checked. Browser interaction tests are not included.

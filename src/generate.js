@@ -28,3 +28,7 @@ async function call(kind,w,extra={}){
 export const mnemonicFor=w=>call('mnemonic',w);
 export const sentenceFor=w=>call('sentence',w);
 export const explainFor=(w,sentence)=>call('explain',w,{sentence});
+// The learner's own sentence goes up for marking; the bonus word travels with
+// it so the grader knows what it was asked to look for.
+export const composeFor=(w,sentence,bonus)=>call('compose',w,{sentence,
+ bonus:bonus?{word:bonus.word,article:bonus.article||'',meaning:bonus.meaning}:null});

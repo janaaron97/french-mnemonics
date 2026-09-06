@@ -689,3 +689,58 @@ footer{color:var(--dim)}
 .report dt{color:var(--dim)}
 .report dd{margin:0;color:var(--text);font-family:Manrope,sans-serif}
 .ghost-btn.on{border-color:var(--green);color:var(--green)}
+
+/* --- meaning check: the answer is a phrase, so the field wraps --- */
+.blank.prose{font-family:'DM Sans',sans-serif;font-size:19px;line-height:1.45;
+ width:min(100%,440px);text-align:center;margin:18px auto 0;display:block;
+ padding:12px 14px;border-radius:10px;resize:none;overflow:hidden}
+.prompt-recall .prompt>span[lang]{font-family:Georgia,serif;font-size:38px;letter-spacing:-1px}
+.prompt-recall .prompt .say{vertical-align:middle;margin-left:12px}
+
+/* --- write a sentence --- */
+.bonus-chip{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;
+ border:1px dashed var(--hair);border-radius:24px;padding:7px 14px;margin:14px auto 0;
+ font-size:12px;color:var(--muted);max-width:100%}
+.bonus-chip b{font-family:Georgia,serif;font-size:15px;font-weight:400;color:var(--text)}
+.bonus-chip em{font-style:normal;color:var(--dim)}
+.bonus-chip span{font-weight:700;color:var(--gold)}
+.compose-field{display:block;width:100%;max-width:520px;margin:18px auto 0;min-height:96px;
+ font-family:Georgia,serif;font-size:19px;line-height:1.6;color:var(--text);
+ background:#ffffff12;border:1px solid var(--hair);border-radius:12px;padding:12px 14px;
+ outline:0;resize:vertical}
+.compose-field::placeholder{color:var(--dim);font-family:Georgia,serif}
+.compose-field:focus{border-color:var(--gold);background:#ffffff1c;box-shadow:0 0 0 3px #e3b55222}
+.compose-field.right{border-color:var(--green);background:#1f6b4530}
+.compose-field.close{border-color:var(--gold);background:#e3b55220}
+.compose-field.wrong{border-color:var(--red);background:#6e2b2530}
+
+/* --- the marking that comes back --- */
+.mark{margin-top:20px;border-top:1px solid var(--hair);padding-top:18px;display:grid;gap:14px;animation:deal .25s}
+.mark-head{display:flex;align-items:flex-start;gap:16px}
+.mark-score{font-family:Manrope,sans-serif;font-size:38px;font-weight:700;letter-spacing:-2px;
+ line-height:1;color:var(--green);flex-shrink:0}
+.mark-score i{font-style:normal;font-size:16px;color:var(--dim);letter-spacing:0}
+.mark-score.s3,.mark-score.s2{color:var(--gold)}
+.mark-score.s1,.mark-score.s0{color:var(--red)}
+.mark-head>div{display:grid;gap:5px;min-width:0}
+.mark-head b{font-size:15px;font-weight:600;line-height:1.5}
+.mark-head span{font-size:12px;color:var(--muted)}
+.mark-fix{display:grid;gap:6px;background:var(--raise);border-radius:12px;padding:14px 16px}
+.mark-fix p{font-family:Georgia,serif;font-size:17px;margin:0;line-height:1.5}
+.mark-fix p .say{background:#ffffff12;color:var(--muted);padding:6px;margin-left:9px;vertical-align:middle}
+.mark-fix em{font-style:normal;font-size:12.5px;color:var(--muted)}
+.mark .breakdown{margin:0;width:auto}
+.mark-recap{display:grid;gap:8px;margin:0 16px 12px}
+.mark-recap p{font-family:Georgia,serif;font-size:15px;margin:0}
+.mark-recap p .say{background:var(--line);color:var(--muted);padding:5px;margin-left:8px;vertical-align:middle}
+.mark-recap em{font-style:normal;font-size:12px;color:var(--muted)}
+.mark-recap .breakdown{margin:0;width:auto}
+.sent-text i{font-style:italic;color:var(--dim)}
+@media(max-width:650px){
+ .prompt-recall .prompt>span[lang]{font-size:30px}
+ .blank.prose{font-size:17px}
+ .compose-field{font-size:17px;min-height:88px}
+ .mark-score{font-size:30px}
+ .mark-fix{padding:12px 13px}
+ .mark-fix p{font-size:15.5px}
+}
