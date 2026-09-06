@@ -185,7 +185,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
     <div className="verdict-head">
      <strong>{s.outcome==='clean'?`+${s.gain}`:s.outcome==='close'?`Almost · +${s.gain}`:s.taught?'Typed it out':'Not this time'}</strong>
      <button type="button" className="say" onClick={()=>speak(c.word.example,notice)} aria-label="Hear the sentence"><Volume2 size={17}/></button>
-     <span lang="fr">{c.word.article||c.word.word} <i>/{c.word.ipa}/</i> — {c.word.meaning}</span>
+     <span lang="fr">{c.word.article||c.word.word} <i>/{c.word.ipa}/</i> — {c.word.meaning} <i>· {c.word.level}</i></span>
     </div>
     {result==='accent'&&<span className="slip">You wrote “{s.typed.trim()}” — accents are part of the spelling.</span>}
     {result==='exact'&&s.outcome==='close'&&!s.taught&&<span className="slip">Right, but with letters uncovered — mastery holds at {cleanSoFar}/{MASTERY}.</span>}
@@ -236,7 +236,7 @@ function Setup({counts,size,setSize,start,picked,setPicked,state}){
   <div className="deck-grid">{decks.map(([m,Icon,title,blurb])=>
    <button key={m} className="deck" disabled={!counts[m]} onClick={()=>start(m)}>
     <Icon size={20}/><strong>{title}</strong><p>{blurb}</p>
-    <span className="deck-count">{counts[m].toLocaleString()} ready <ArrowRight size={15}/></span>
+    <span className="deck-count">{counts[m].toLocaleString()} ready{m!=='review'&&<> in {picked.join(', ')}</>} <ArrowRight size={15}/></span>
    </button>)}</div>
   <div className="setup-row"><span className="setup-label">ROUND LENGTH</span>
    <div className="level-chips compact">{ROUND.map(n=><button key={n} className={size===n?'on':''} onClick={()=>setSize(n)}>{n} cards</button>)}</div>
@@ -254,7 +254,11 @@ function Summary({s,setStage,start,setState,state,openWord,notice,explain,explai
  const [open,setOpen]=useState(null);
  const mastered=s.done.filter(d=>state.known[d.card.id]).length;
  return <div className="done-screen">
-  <h1><Trophy size={26}/> ROUND COMPLETE</h1>
+  <div className="done-head">
+   <button className="hud-quit" onClick={()=>setStage('setup')} aria-label="Close"><X size={20}/></button>
+   <h1><Trophy size={24}/> ROUND COMPLETE</h1>
+  </div>
+  <div className="done-body">
 
   <div className="cheer">
    <div><Flame size={22}/><div><strong>{run} day{run===1?'':'s'} streak</strong><span>{run>1?'Still going.':'Back on it.'}</span></div></div>
@@ -300,9 +304,9 @@ function Summary({s,setStage,start,setState,state,openWord,notice,explain,explai
    </div>;
   })}</div>
 
+  </div>
   <div className="keep-bar">
    <button className="go" onClick={()=>start(s.mode)}>KEEP PLAYING</button>
-   <button className="go outline slim" onClick={()=>setStage('setup')}>CHANGE DECK</button>
   </div>
  </div>;
 }

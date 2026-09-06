@@ -147,9 +147,7 @@ function App({session}){
  </aside>
 
  <main><header>
-  <div className="header-left">
-   <button className="burger" onClick={()=>setDrawer(true)} aria-label="Menu"><Menu size={22}/></button>
-   <span>{page}</span></div>
+  <div className="header-left"><span>{page}</span></div>
   <div className="header-right">
    <button className="review-pill" onClick={()=>due.length?toPlay('review'):setNotice('No reviews due yet. Play a round to begin your review schedule.')}>
     <span className="status-dot"/>{due.length} reviews due <ArrowRight size={15}/></button>
@@ -166,6 +164,7 @@ function App({session}){
      <button onClick={()=>supabase.auth.signOut()}><LogOut size={15}/> Sign out</button>
     </div>}
    </div>
+   <button className="burger" onClick={()=>setDrawer(true)} aria-label="Menu"><Menu size={22}/></button>
   </div></header>
  {notice&&<div role="status" className="notice">{notice}<button aria-label="Dismiss notification" onClick={()=>setNotice('')}><X size={16}/></button></div>}
 

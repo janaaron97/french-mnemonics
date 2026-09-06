@@ -542,10 +542,8 @@ footer{color:var(--dim)}
 .go.slim{padding:14px 20px;font-size:13px}
 
 /* --- round complete --- */
-.done-screen{position:fixed;inset:0;z-index:60;overflow-y:auto;background:var(--bg);color:var(--text);
- padding:26px 18px 108px;display:grid;gap:14px;align-content:start;max-width:720px;margin:0 auto}
-.done-screen h1{display:flex;align-items:center;gap:12px;font-family:Manrope,sans-serif;font-size:24px;
- letter-spacing:1px;margin:6px 0 8px;color:var(--text)}
+
+
 .done-screen h1 svg{color:var(--gold)}
 .done-screen h2{font-size:11px;letter-spacing:1.6px;color:var(--dim);margin:14px 0 0;text-transform:uppercase}
 .cheer{background:var(--surface);border:1px solid var(--line);border-radius:12px;display:grid}
@@ -577,12 +575,11 @@ footer{color:var(--dim)}
 .explain-btn{font:700 12px/1 'DM Sans',sans-serif;letter-spacing:1px;color:var(--green)!important}
 .done-tag{font-size:11px;letter-spacing:1px;color:var(--dim);padding:0 10px}
 .sent .breakdown{margin:0 16px 14px;width:auto}
-.keep-bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--hair);
- padding:12px 18px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px;justify-content:center}
+
 .keep-bar .go{flex:1;max-width:420px;justify-content:center}
 .keep-bar .go.slim{flex:0 0 auto}
 @media(max-width:650px){
- .done-screen{padding:20px 14px 100px}
+ 
  .stat-grid strong{font-size:20px}
  .keep-bar .go.slim{display:none}
 }
@@ -599,17 +596,17 @@ footer{color:var(--dim)}
 
 .arena-stage{min-height:0;flex:1;overflow-y:auto;width:100%}
 
-.done-screen{height:var(--vvh,100dvh);top:var(--vvtop,0);bottom:auto}
+
 
 /* --- mobile: nav becomes a drawer --- */
 .burger{display:none}
 .header-left{display:flex;align-items:center;gap:12px}
 .scrim{display:none}
 @media(max-width:850px){
- .burger{display:inline-flex;padding:8px;margin-left:-8px;border-radius:9px;color:var(--muted)}
+ .burger{display:inline-flex;padding:8px;margin-right:-6px;border-radius:9px;color:var(--muted)}
  .burger:hover{background:var(--raise);color:var(--text)}
  .scrim{display:block;position:fixed;inset:0;background:#000a;z-index:70}
- aside{position:fixed;inset:0 auto 0 0;width:255px;max-width:82vw;transform:translateX(-100%);
+ aside{position:fixed;inset:0 0 0 auto;width:255px;max-width:82vw;transform:translateX(100%);border-right:0;border-left:1px solid var(--line);
   transition:transform .22s ease;z-index:71;display:flex;flex-direction:column;background:var(--surface);
   border-right:1px solid var(--line);padding:26px 18px;gap:0}
  aside.open{transform:none}
@@ -630,3 +627,27 @@ footer{color:var(--dim)}
  background:var(--bg);color:var(--text)}
 .arena-hud{flex:0 0 auto;width:100%;max-width:680px}
 .prompt-recall .blank{display:block;margin:16px auto 0}
+
+/* --- round complete: fixed shell, one scrolling body, pinned action --- */
+.done-screen{position:fixed;left:0;right:0;top:var(--vvtop,0);height:var(--vvh,100dvh);z-index:60;
+ display:flex;flex-direction:column;overflow:hidden;background:var(--bg);color:var(--text)}
+.done-head{flex:0 0 auto;width:100%;max-width:720px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:14px 18px 6px}
+.done-head h1{display:flex;align-items:center;gap:11px;font-family:Manrope,sans-serif;font-size:21px;
+ letter-spacing:1px;margin:0;color:var(--text)}
+.done-head h1 svg{color:var(--gold)}
+.done-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+ width:100%;max-width:720px;margin:0 auto;padding:8px 18px 20px;display:block}
+.done-body>*{margin:0 0 14px}
+.done-body>h2{margin:18px 0 8px}
+.keep-bar{flex:0 0 auto;width:100%;max-width:720px;margin:0 auto;border-top:1px solid var(--hair);
+ padding:12px 18px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px}
+.keep-bar .go{flex:1;justify-content:center}
+@media(max-width:650px){.done-head{padding:12px 14px 4px}.done-body{padding:6px 14px 18px}.keep-bar{padding-left:14px;padding-right:14px}}
+@media(max-width:850px){
+ aside{align-items:stretch;text-align:left}
+ aside nav{display:grid;grid-template-columns:1fr;justify-items:stretch;justify-content:stretch;gap:4px}
+ aside nav button{width:100%;flex-direction:row;justify-content:flex-start;text-align:left;gap:13px;font-size:14px;padding:13px 14px}
+ aside .brand{text-align:left;font-size:36px;margin:0 4px 24px}
+ aside .sidebar-bottom{text-align:left;padding:20px 4px 0}
+ aside .local,aside .signout{justify-content:flex-start}
+}
