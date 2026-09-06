@@ -2,29 +2,79 @@ import React,{useState,useEffect,useRef} from 'react';
 import {Volume2} from 'lucide-react';
 import {tokenize,levels,levelBlurb} from './engine';
 
-export function speak(text,notice,rate=.8){
- if(!('speechSynthesis' in window))return notice?.('Speech is unavailable in this browser. Use the IPA guide.');
- const voice=speechSynthesis.getVoices().find(v=>v.lang.startsWith('fr'));
- speechSynthesis.cancel();
- const u=new SpeechSynthesisUtterance(text);
- u.lang='fr-FR';u.rate=rate;
- if(voice)u.voice=voice;else notice?.('Using your device’s French speech service. Voice availability varies by browser.');
- speechSynthesis.speak(u);
+// Safari will not hand out voices until it has loaded them, and reports an
+// empty list on the first call, so cache them and refresh on voiceschanged.
+let voices=[];
+const readVoices=()=>{try{voices=window.speechSynthesis?.getVoices()||[]}catch{voices=[]}};
+if(typeof window!=='undefined'&&window.speechSynthesis){
+ readVoices();
+ try{window.speechSynthesis.addEventListener('voiceschanged',readVoices)}catch{window.speechSynthesis.onvoiceschanged=readVoices}
 }
 
-let ctx;
+export function speak(text,notice,rate=.8){
+ const synth=typeof window!=='undefined'&&window.speechSynthesis;
+ if(!synth)return notice?.('Speech is unavailable in this browser. Use the IPA guide.');
+ if(!voices.length)readVoices();
+ const voice=voices.find(v=>/^fr/i.test(v.lang));
+ try{
+  // Safari can be left paused when a tab is backgrounded, and cancelling when
+  // nothing is speaking sometimes swallows the next utterance outright.
+  if(synth.paused)synth.resume();
+  if(synth.speaking||synth.pending)synth.cancel();
+  const u=new SpeechSynthesisUtterance(String(text));
+  u.lang=voice?.lang||'fr-FR';
+  u.rate=Math.max(.5,Math.min(2,rate));
+  if(voice)u.voice=voice;
+  else if(voices.length)notice?.('No French voice on this device — using the default. Voice availability varies by browser.');
+  synth.speak(u);
+ }catch{notice?.('Speech failed to start. Try again, or check your device volume.')}
+}
+
+// An AudioContext starts suspended and Safari only lets a real user gesture
+// resume it — and only truly unlocks once a buffer has actually played.
+let ctx,unlocked=false;
+function audio(){
+ try{
+  const Ctx=window.AudioContext||window.webkitAudioContext;
+  if(!Ctx)return null;
+  ctx=ctx||new Ctx();
+  if(ctx.state==='suspended')ctx.resume();
+  return ctx;
+ }catch{return null}
+}
+export function unlockSound(){
+ const c=audio();
+ if(!c||unlocked)return;
+ try{
+  const s=c.createBufferSource();
+  s.buffer=c.createBuffer(1,1,22050);
+  s.connect(c.destination);
+  s.start(0);
+  unlocked=true;
+ }catch{}
+}
+export function useSoundUnlock(){
+ useEffect(()=>{
+  const on=()=>unlockSound();
+  window.addEventListener('pointerdown',on);
+  window.addEventListener('touchend',on);
+  window.addEventListener('keydown',on);
+  return()=>{window.removeEventListener('pointerdown',on);
+   window.removeEventListener('touchend',on);window.removeEventListener('keydown',on)};
+ },[]);
+}
 export function tone(steps,on=true){
  if(!on)return;
+ const c=audio();
+ if(!c)return;
  try{
-  ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();
-  if(ctx.state==='suspended')ctx.resume();
-  steps.forEach(([hz,at,len,shape='triangle'],i)=>{
-   const o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime+at;
+  steps.forEach(([hz,at,len,shape='triangle'])=>{
+   const o=c.createOscillator(),g=c.createGain(),t=c.currentTime+at+.02;
    o.type=shape;o.frequency.setValueAtTime(hz,t);
    g.gain.setValueAtTime(.0001,t);
    g.gain.exponentialRampToValueAtTime(.14,t+.012);
    g.gain.exponentialRampToValueAtTime(.0001,t+len);
-   o.connect(g);g.connect(ctx.destination);
+   o.connect(g);g.connect(c.destination);
    o.start(t);o.stop(t+len+.02);
   });
  }catch{}

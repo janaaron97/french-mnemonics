@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
 import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
-import {LevelChips,Cues,speak} from './ui';
+import {LevelChips,Cues,speak,useSoundUnlock} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
 import Library from './library.jsx';
@@ -44,6 +44,7 @@ function App({session}){
  useEffect(()=>{try{localStorage.setItem('echo-progress',JSON.stringify(state))}catch{setNotice('Browser storage is full or unavailable. Export your progress before leaving.')}},[state]);
  useEffect(()=>{try{localStorage.setItem('echo-levels',JSON.stringify(picked))}catch{}},[picked]);
  useEffect(()=>{const id=setInterval(()=>setTime(Date.now()),15000);return()=>clearInterval(id)},[]);
+ useSoundUnlock();
  useEffect(()=>{
   const shut=e=>{if(e.type==='pointerdown'||e.key==='Escape')setMenu(false);if(e.key==='Escape')setDrawer(false)};
   window.addEventListener('pointerdown',shut);window.addEventListener('keydown',shut);

@@ -80,7 +80,6 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    missed:ok?v.missed:[...v.missed,c.word]});
   tone(outcome==='clean'?[[660,0,.09],[880,.08,.14]]:outcome==='close'?[[620,0,.1],[700,.09,.12]]:[[190,0,.18,'sawtooth']],state.sound);
   buzz(ok?18:[28,40,28]);
-  if(outcome==='clean')timer.current=setTimeout(next,climbed?1600:950);
  };
  const submit=e=>{
   e?.preventDefault?.();
