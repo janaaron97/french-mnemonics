@@ -116,3 +116,17 @@ test('a saved breakdown records which sentence it explains',()=>{
  assert.equal(diff(s,{...s,notesOn:{}},['A1'],['A1']).upLibrary[0].explain,null);
  assert.equal(fromRows({library:[{word_id:7,note:'',explain:null,known_at:null,added_at:iso(1)}]}).state.notesOn['7'],undefined);
 });
+
+test('per-day study counts ride to the cloud and back',()=>{
+ const s={...blank(),days:['2026-09-05','2026-09-06'],daily:{'2026-09-06':9}};
+ const row=stateRow(s,['A1']);
+ assert.deepEqual(row.daily,{'2026-09-06':9});
+ const back=fromRows({state:row});
+ assert.deepEqual(back.state.daily,{'2026-09-06':9});
+ assert.deepEqual(back.state.days,['2026-09-05','2026-09-06']);
+ // a row written before the column existed comes back empty, not undefined
+ assert.deepEqual(fromRows({state:{...row,daily:null}}).state.daily,{});
+ assert.deepEqual(stateRow({...blank(),daily:'nonsense'},['A1']).daily,{});
+ assert.deepEqual(fromRows({state:{...row,daily:{'oops':1,'2026-09-06':'3'}}}).state.daily,{'2026-09-06':3});
+ assert.ok(!isEmpty(diff(s,{...s,daily:{'2026-09-06':10}},['A1'],['A1'])),'a changed count must sync');
+});

@@ -1,6 +1,6 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
 import {X,ArrowRight,Check,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift,TrendingUp,TrendingDown} from 'lucide-react';
-import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,mastery,spelledCount,standing,streak as dayStreak,MASTERY,posOf} from './engine';
+import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,addStudy,mastery,spelledCount,standing,streak as dayStreak,MASTERY,posOf} from './engine';
 import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor,composeFor} from './generate.js';
 
@@ -99,7 +99,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   setState(st=>{
    const lib={...st.lib};
    for(const id of ids)if(!st.known[id]&&!lib[id])lib[id]=now;
-   const {next}=applyGrade({...st,lib,days:addDay(st.days)},c.id,grades[outcome],now,spells);
+   const daily=addStudy(st.daily,st.cards[c.id],now);
+   const {next}=applyGrade({...st,lib,days:addDay(st.days),daily},c.id,grades[outcome],now,spells);
    return {...next,points:Math.max(0,next.points+gain)};
   });
   const streak=ok?v.streak+1:0;
@@ -227,7 +228,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
        <span className="arena-eyebrow">WRITE A SENTENCE USING</span>
        <p className="prompt"><span lang="fr">{c.word.article||c.word.word}</span>
         <button type="button" className="say" onClick={()=>speak(c.word.word,notice)} aria-label="Hear it"><Volume2 size={17}/></button></p>
-       <p className="prompt-gloss">{c.word.meaning} · {c.word.level}</p>
+       <p className="prompt-gloss">{c.word.level} · {posOf(c.word)}</p>
        {c.bonus&&<div className="bonus-chip"><Gift size={14}/> bonus <b lang="fr">{c.bonus.article||c.bonus.word}</b>
         <em>{c.bonus.meaning}</em><span>+{BONUS}</span></div>}
        <textarea ref={field} className={'compose-field '+(result?tone3:'')} lang="fr" rows={3}
@@ -266,6 +267,10 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
        :s.review.usedBonus?`${signed(s.gain)}, including ${BONUS} for working in “${c.bonus.word}”.`
        :c.bonus?`${signed(s.gain)}. No bonus — “${c.bonus.word}” went unused.`:`${signed(s.gain)}.`}</span></div>
     </div>
+    <div className="verdict-head">
+     <button type="button" className="say" onClick={()=>speak(c.word.word,notice)} aria-label="Hear the word"><Volume2 size={17}/></button>
+     <span lang="fr">{c.word.article||c.word.word} <i>/{c.word.ipa}/</i> — {c.word.meaning} <i>· {c.word.level}</i></span>
+    </div>
     {s.review.notes&&<div className="breakdown">{s.review.notes}</div>}
     {s.review.corrected&&<div className="mark-fix">
      <span className="arena-eyebrow">{s.review.corrected.trim()===s.typed.trim()?'AS YOU WROTE IT':'CORRECTED'}</span>
@@ -276,7 +281,11 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
      <span className="arena-eyebrow">OTHER WAYS TO SAY IT</span>
      {s.review.better.map((b,i)=><p key={i} lang="fr">{b}
       <button type="button" className="say" onClick={()=>speak(b,notice)} aria-label="Hear it"><Volume2 size={16}/></button></p>)}</div>}
-    {s.mastered&&<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>}
+    {s.mastered
+     ?<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>
+     :s.outcome==='clean'
+      ?<span className="collected"><Sparkles size={13}/> sound French — mastery {cleanSoFar}/{MASTERY}</span>
+      :<span className="slip">Mastery holds at {cleanSoFar}/{MASTERY} — it moves on a sentence the grader calls sound.</span>}
    </div>}
 
    {result&&c.kind!=='compose'&&<div className="verdict">

@@ -30,6 +30,9 @@ export function fromRows({library=[],reviews=[],state=null}){
   out.points=Number(state.xp)||0;out.rounds=state.rounds||0;out.best=state.best||0;
   out.cursor=state.cursor||0;out.sound=state.sound!==false;
   out.days=Array.isArray(state.days)?[...state.days].filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort():[];
+  out.daily=Object.fromEntries(Object.entries(state.daily&&typeof state.daily==='object'?state.daily:{})
+   .filter(([d,n])=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Number(n)))
+   .map(([d,n])=>[d,Math.max(0,Math.round(Number(n)))]));
  }
  const picked=Array.isArray(state?.levels)?state.levels.filter(l=>LEVELS.includes(l)):null;
  return {state:out,levels:picked?.length?LEVELS.filter(l=>picked.includes(l)):null};
@@ -56,6 +59,7 @@ export const reviewRow=(s,id)=>{
 export const stateRow=(s,picked)=>({
  xp:Math.max(0,Math.round(s.points||0)),rounds:Math.max(0,s.rounds||0),best:Math.max(0,s.best||0),
  cursor:Math.max(0,s.cursor||0),sound:s.sound!==false,days:Array.isArray(s.days)?s.days:[],
+ daily:s.daily&&typeof s.daily==='object'?s.daily:{},
  levels:picked?.length?picked:['A1'],updated_at:new Date().toISOString()});
 
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -84,7 +88,7 @@ export async function load(userId){
  const [library,reviews,state]=await Promise.all([
   supabase.from('echo_library').select('word_id,note,note_ai,sentence,sentence_en,explain,explain_of,known_at,added_at').eq('user_id',userId),
   supabase.from('echo_reviews').select('word_id,due,interval_days,reviews,last_reviewed,clean,close,missed,spelled').eq('user_id',userId),
-  supabase.from('echo_state').select('xp,rounds,best,cursor,sound,levels,days').eq('user_id',userId).maybeSingle()
+  supabase.from('echo_state').select('xp,rounds,best,cursor,sound,levels,days,daily').eq('user_id',userId).maybeSingle()
  ]);
  for(const r of [library,reviews,state])if(r.error)throw r.error;
  return {...fromRows({library:library.data,reviews:reviews.data,state:state.data}),fresh:!state.data&&!library.data.length};

@@ -2,7 +2,7 @@ import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
-import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,spelledCount,standing,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
+import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,addDay,addStudy,mastery,spelledCount,standing,stage,streak,bestStreak,lastDays,studySeries,MASTERY} from './engine';
 import {LevelChips,Cues,speak,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
@@ -33,6 +33,56 @@ function Root(){
  if(session===undefined)return <div className="booting"><span className="tiny-palace">é</span><p>Opening your palace…</p></div>;
  if(!session||recovery)return <Auth recovery={recovery}/>;
  return <App key={session.user.id} session={session}/>;
+}
+
+// Words studied per day. A day you were active on before the counter existed
+// has no number, so the line breaks there instead of dropping to a false zero.
+// The svg is stretched to the card width, which would squash anything but a
+// path, so ticks and hit targets are HTML laid over it rather than svg text.
+function StudyLine({series}){
+ const W=600,H=150;
+ const known=series.filter(d=>d.n!==null);
+ const top=Math.max(4,Math.ceil(Math.max(...known.map(d=>d.n),0)/4)*4);
+ const x=i=>i*W/Math.max(1,series.length-1);
+ const y=n=>(1-n/top)*H;
+ // one path per unbroken stretch, so a gap stays a gap
+ const runs=[];
+ for(const [i,d] of series.entries()){
+  const last=runs[runs.length-1];
+  if(d.n===null){if(last)runs.push(null);continue}
+  if(Array.isArray(last))last.push([x(i),y(d.n)]);else runs.push([[x(i),y(d.n)]]);
+ }
+ const lines=runs.filter(Array.isArray);
+ const total=known.reduce((a,d)=>a+d.n,0);
+ const best=Math.max(0,...known.map(d=>d.n));
+ const label=d=>`${d.day}: ${d.n===null?'not recorded':d.n+' word'+(d.n===1?'':'s')}`;
+ return <div className="study-chart">
+  <div className="chart-head">
+   <div><strong>{total.toLocaleString()}</strong><span>words in {series.length} days</span></div>
+   <div><strong>{best.toLocaleString()}</strong><span>best day</span></div>
+  </div>
+  <div className="chart-plot">
+   <div className="chart-y">{[top,top/2,0].map(v=><span key={v}>{v}</span>)}</div>
+   <div className="chart-area">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+     {[0,.5,1].map(f=><line key={f} className="grid" x1="0" x2={W} y1={f*H} y2={f*H} vectorEffect="non-scaling-stroke"/>)}
+     {lines.map((run,i)=><g key={i}>
+      {run.length>1&&<path className="fill"
+       d={`M${run[0][0]},${H} ${run.map(([px,py])=>`L${px},${py}`).join(' ')} L${run[run.length-1][0]},${H} Z`}/>}
+      <path className="line" fill="none" vectorEffect="non-scaling-stroke"
+       d={run.length>1?run.map(([px,py],k)=>`${k?'L':'M'}${px},${py}`).join(' ')
+        :`M${run[0][0]-3},${run[0][1]} L${run[0][0]+3},${run[0][1]}`}/>
+     </g>)}
+    </svg>
+    <div className="chart-hits" role="img"
+     aria-label={`Words studied per day over the last ${series.length} days. ${series.filter(d=>d.n).map(label).join('. ')||'Nothing recorded yet.'}`}>
+     {series.map(d=><i key={d.day} title={label(d)} className={d.n===null?'gap':''}
+      style={{height:d.n?Math.max(3,d.n/top*100)+'%':'0'}}/>)}
+    </div>
+   </div>
+  </div>
+  <div className="chart-axis"><span>{series[0].day.slice(5)}</span><span>{series[series.length-1].day.slice(5)}</span></div>
+ </div>;
 }
 
 function App({session}){
@@ -110,8 +160,9 @@ function App({session}){
  // it went — so a rating here is logged against the word without moving mastery.
  // Mastery is only ever earned by producing the word in a round.
  const rate=grade=>{
-  setState(s=>applyGrade(s,w.id,grade,Date.now(),false).next);
-  setTime(Date.now());
+  const now=Date.now();
+  setState(s=>applyGrade({...s,days:addDay(s.days),daily:addStudy(s.daily,s.cards[w.id],now)},w.id,grade,now,false).next);
+  setTime(now);
   const following=review?due.find(x=>x.id!==w.id):pool.find(x=>x.id!==w.id&&!state.cards[x.id]&&!state.known[x.id]);
   setSelected(following||null);setRevealed(!review);
   if(!following){setReview(false);setNotice(review?'You’re caught up. Come back when your next review is due.':'Every word in these levels has been introduced. Widen the level range.');setPage('Progress')}
@@ -129,6 +180,7 @@ function App({session}){
 
  const run=useMemo(()=>streak(state.days),[state.days]),bestRun=useMemo(()=>bestStreak(state.days),[state.days]);
  const rank=useMemo(()=>standing(state.points),[state.points]);
+ const dayline=useMemo(()=>studySeries(state.days,state.daily,30),[state.days,state.daily]);
  const matches=list=>list.filter(x=>(x.word+' '+x.meaning).toLowerCase().includes(query.toLowerCase()));
  const introduced=pool.filter(x=>state.cards[x.id]||state.known[x.id]).length;
  const shared={words,state,setState,picked,setPicked,notice:setNotice,openWord};
@@ -219,6 +271,7 @@ function App({session}){
    that, and a miss costs 75. Points fall as well as rise, so a bad stretch takes the level back down.
    Level {rank.level+1} sits at {(rank.points+rank.toNext).toLocaleString()} points in total.</p>
  </div>
+ <StudyLine series={dayline}/>
  <div className="streak-card">
   <div><strong>{run}</strong><span>day streak</span></div>
   <div><strong>{bestRun}</strong><span>longest</span></div>

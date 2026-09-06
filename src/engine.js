@@ -422,12 +422,33 @@ export function lastDays(days,count=91,from=dayKey()){
  for(let i=count-1;i>=0;i--){const day=shift(from,-i);out.push({day,on:set.has(day)})}
  return out;
 }
-export const empty={version:2,cards:{},notes:{},aiNotes:{},phrases:{},notesOn:{},lib:{},known:{},days:[],cursor:0,points:0,best:0,rounds:0,sound:true};
+// A word counts once a day however many times it comes round, and the card's
+// own last-seen stamp already says whether today has been counted — so this
+// needs no per-day set of ids, only the card you are about to answer.
+export function addStudy(daily,card,now=Date.now()){
+ const day=dayKey(new Date(now));
+ if(card?.last&&dayKey(new Date(card.last))===day)return daily;
+ return {...daily,[day]:(daily[day]||0)+1};
+}
+// `n` is null, not zero, for a day you studied before the counter existed:
+// the line breaks over it rather than claiming you did nothing.
+export function studySeries(days,daily,count=30,from=dayKey()){
+ const active=new Set(days),counts=daily||{},out=[];
+ for(let i=count-1;i>=0;i--){
+  const day=shift(from,-i),n=counts[day];
+  out.push({day,n:Number.isFinite(n)?n:(active.has(day)?null:0)});
+ }
+ return out;
+}
+export const empty={version:2,cards:{},notes:{},aiNotes:{},phrases:{},notesOn:{},lib:{},known:{},days:[],daily:{},cursor:0,points:0,best:0,rounds:0,sound:true};
 export function migrate(saved){
  if(!saved||typeof saved!=='object'||Array.isArray(saved))return {...empty};
  const out={...empty,...saved,version:2,cards:plain(saved.cards),notes:plain(saved.notes),aiNotes:plain(saved.aiNotes),phrases:plain(saved.phrases),notesOn:plain(saved.notesOn),lib:plain(saved.lib),known:plain(saved.known)};
  if(!saved.lib)out.lib=Object.fromEntries(Object.keys(out.cards).map(id=>[id,0]));
  out.days=Array.isArray(saved.days)?saved.days.filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort():[];
+ out.daily=Object.fromEntries(Object.entries(plain(saved.daily))
+  .filter(([d,n])=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Number(n)))
+  .map(([d,n])=>[d,Math.max(0,Math.round(Number(n)))]));
  // saves and backups from before levels stored the same number as `xp`. The
  // spread has already filled points from `empty`, so ask the saved object.
  if(!Number.isFinite(saved.points)&&Number.isFinite(saved.xp))out.points=saved.xp;
@@ -440,7 +461,7 @@ export function validate(data,words){
  const d=plain(data);
  if(d.version!==1&&d.version!==2)return null;
  const ids=new Set(words.map(w=>String(w.id)));
- for(const key of ['cards','notes','aiNotes','phrases','notesOn','lib','known'])if(key in d&&plain(d[key])!==d[key])return null;
+ for(const key of ['cards','notes','aiNotes','phrases','notesOn','lib','known','daily'])if(key in d&&plain(d[key])!==d[key])return null;
  for(const [id,c] of Object.entries(plain(d.cards)))
   if(!ids.has(id)||!c||!Number.isFinite(c.due)||!Number.isFinite(c.interval)||c.interval<0||!Number.isFinite(c.reviews))return null;
  for(const [id,n] of Object.entries(plain(d.notes)))if(!ids.has(id)||typeof n!=='string')return null;

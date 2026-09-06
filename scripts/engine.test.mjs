@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,standing,levelAt,pointsFor,STEP,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,standing,levelAt,pointsFor,STEP,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,addStudy,studySeries,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -354,4 +354,38 @@ test('a backup written before levels reads its total back as points',()=>{
  assert.equal(old.xp,undefined,'the old field does not linger');
  assert.equal(migrate({version:2}).points,0);
  assert.equal(migrate({version:2,points:900,xp:5}).points,900,'points wins where both exist');
+});
+
+test('a word counts once a day, however many times it comes round',()=>{
+ const noon=new Date(2026,8,6,12,0,0).getTime();
+ const earlier=new Date(2026,8,6,9,0,0).getTime();
+ const yesterday=new Date(2026,8,5,23,0,0).getTime();
+ let daily={};
+ daily=addStudy(daily,undefined,noon);           // never seen before
+ assert.deepEqual(daily,{'2026-09-06':1});
+ daily=addStudy(daily,{last:earlier},noon);      // already counted today
+ assert.deepEqual(daily,{'2026-09-06':1},'a second answer on the same word must not re-count');
+ daily=addStudy(daily,{last:yesterday},noon);    // last seen yesterday
+ assert.deepEqual(daily,{'2026-09-06':2});
+ daily=addStudy(daily,{last:null},new Date(2026,8,7,8,0,0).getTime());
+ assert.deepEqual(daily,{'2026-09-06':2,'2026-09-07':1});
+ const before={'2026-09-06':2,'2026-09-07':1};
+ assert.notEqual(addStudy(before,undefined,noon),before,'never mutates in place');
+});
+test('the study series marks an uncounted active day as a gap, not a zero',()=>{
+ const days=['2026-09-02','2026-09-04','2026-09-06'];
+ const daily={'2026-09-06':7,'2026-09-04':3};
+ const out=studySeries(days,daily,5,'2026-09-06');
+ assert.deepEqual(out.map(d=>d.day),['2026-09-02','2026-09-03','2026-09-04','2026-09-05','2026-09-06']);
+ assert.deepEqual(out.map(d=>d.n),[null,0,3,0,7],'active but uncounted reads null; idle reads 0');
+ assert.deepEqual(studySeries([],undefined,3,'2026-09-06').map(d=>d.n),[0,0,0],'no counter at all is safe');
+ assert.equal(studySeries(days,daily,30,'2026-09-06').length,30);
+});
+test('daily counts survive a save, and rubbish in them does not',()=>{
+ const back=migrate({version:2,daily:{'2026-09-06':'4','not-a-day':9,'2026-09-05':-2,'2026-09-04':1.6}});
+ assert.deepEqual(back.daily,{'2026-09-06':4,'2026-09-05':0,'2026-09-04':2});
+ assert.deepEqual(migrate({version:2}).daily,{});
+ assert.deepEqual(migrate(null).daily,{});
+ assert.equal(validate({version:2,daily:[]},words),null,'an array is not a count map');
+ assert.deepEqual(validate({version:2,daily:{'2026-09-06':5}},words).daily,{'2026-09-06':5});
 });

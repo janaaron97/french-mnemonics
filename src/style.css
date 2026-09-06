@@ -765,3 +765,34 @@ footer{color:var(--dim)}
  .level-n strong{font-size:30px}
  .level-n{min-width:52px}
 }
+
+/* --- words studied per day --- */
+.study-chart{border:1px solid var(--line);background:var(--surface);border-radius:14px;
+ padding:16px 18px 12px;margin:0 0 20px}
+.chart-head{display:flex;gap:28px;margin-bottom:12px}
+.chart-head div{display:grid;gap:2px}
+.chart-head strong{font-family:Manrope,sans-serif;font-size:24px;font-weight:700;letter-spacing:-1px;line-height:1}
+.chart-head span{font-size:11px;color:var(--muted)}
+.chart-plot{display:flex;gap:8px}
+.chart-y{display:flex;flex-direction:column;justify-content:space-between;height:140px;
+ font-size:10.5px;color:var(--dim);text-align:right;min-width:18px;
+ font-variant-numeric:tabular-nums;transform:translateY(-5px)}
+.chart-area{position:relative;flex:1;height:140px;min-width:0}
+.chart-area svg{display:block;width:100%;height:100%}
+.study-chart .grid{stroke:var(--line);stroke-width:1}
+.study-chart .line{stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.study-chart .fill{fill:var(--green);opacity:.13;stroke:none}
+/* invisible per-day columns: they carry the tooltip the stretched svg cannot */
+.chart-hits{position:absolute;inset:0;display:flex;align-items:flex-end}
+.chart-hits i{flex:1;min-width:0;align-self:flex-end;border-radius:2px 2px 0 0;
+ background:transparent;transition:background .12s}
+.chart-hits i:hover{background:#ffffff14;height:100%!important}
+.chart-hits i.gap:hover{background:#ffffff0a}
+.chart-axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
+ padding:4px 0 0 26px;font-variant-numeric:tabular-nums}
+@media(max-width:650px){
+ .study-chart{padding:14px 14px 10px}
+ .chart-y,.chart-area{height:120px}
+ .chart-head{gap:20px}
+ .chart-head strong{font-size:20px}
+}
