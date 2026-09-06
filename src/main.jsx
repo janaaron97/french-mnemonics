@@ -1,12 +1,14 @@
-import React,{useState,useEffect,useMemo} from 'react';
+import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
-import {BookOpen,Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Compass,Check,Plus,Download,Upload,X,Sparkles} from 'lucide-react';
+import {BookOpen,Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Compass,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw} from 'lucide-react';
 import words from './words.json';
-import {sounds,chunks,scene,schedule,levels,levelBlurb,migrate,validate,posOf} from './engine';
+import {sounds,chunks,scene,schedule,levels,levelBlurb,migrate,validate,posOf,empty} from './engine';
 import {LevelChips,Cues,speak} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
 import Library from './library.jsx';
+import Auth from './auth.jsx';
+import {supabase,load,save,diff,isEmpty,hasContent} from './cloud.js';
 import './style.css';
 
 const groups=[
@@ -17,7 +19,23 @@ const groups=[
 const read=()=>{try{return migrate(JSON.parse(localStorage.getItem('echo-progress')))}catch{return migrate(null)}};
 const readLevels=()=>{try{const v=JSON.parse(localStorage.getItem('echo-levels'));return Array.isArray(v)&&v.length&&v.every(l=>levels.includes(l))?v:['A1']}catch{return ['A1']}};
 
-function App(){
+function Root(){
+ const [session,setSession]=useState(undefined),[recovery,setRecovery]=useState(false);
+ useEffect(()=>{
+  supabase.auth.getSession().then(({data})=>setSession(data.session||null));
+  const {data}=supabase.auth.onAuthStateChange((event,next)=>{
+   if(event==='PASSWORD_RECOVERY')setRecovery(true);
+   if(event==='SIGNED_IN'||event==='SIGNED_OUT'||event==='INITIAL_SESSION')setRecovery(r=>event==='SIGNED_OUT'?false:r);
+   setSession(next||null);
+  });
+  return()=>data.subscription.unsubscribe();
+ },[]);
+ if(session===undefined)return <div className="booting"><span className="tiny-palace">é</span><p>Opening your palace…</p></div>;
+ if(!session||recovery)return <Auth recovery={recovery}/>;
+ return <App key={session.user.id} session={session}/>;
+}
+
+function App({session}){
  const [state,setState]=useState(read),[page,setPage]=useState('Play'),[picked,setPicked]=useState(readLevels);
  const [query,setQuery]=useState(''),[selected,setSelected]=useState(null),[revealed,setRevealed]=useState(false);
  const [review,setReview]=useState(false),[notice,setNotice]=useState(''),[soundType,setSoundType]=useState('All');
@@ -26,6 +44,44 @@ function App(){
  useEffect(()=>{try{localStorage.setItem('echo-progress',JSON.stringify(state))}catch{setNotice('Browser storage is full or unavailable. Export your progress before leaving.')}},[state]);
  useEffect(()=>{try{localStorage.setItem('echo-levels',JSON.stringify(picked))}catch{}},[picked]);
  useEffect(()=>{const id=setInterval(()=>setTime(Date.now()),15000);return()=>clearInterval(id)},[]);
+
+ const [sync,setSync]=useState('loading');
+ const synced=useRef({state:null,levels:null});
+ const userId=session.user.id;
+
+ useEffect(()=>{
+  let live=true;
+  (async()=>{
+   try{
+    const cloud=await load(userId);
+    if(!live)return;
+    const local=read();
+    const seed=cloud.fresh&&hasContent(local)&&!hasContent(cloud.state);
+    const next=seed?local:cloud.state;
+    const nextLevels=seed?readLevels():(cloud.levels||readLevels());
+    setState(next);setPicked(nextLevels);
+    synced.current=seed?{state:{...empty},levels:null}:{state:next,levels:nextLevels};
+    setSync('ready');
+    if(seed)setNotice('Your progress on this device was uploaded to your account.');
+   }catch(err){if(live){setSync('error');setNotice('Could not reach your account: '+(err?.message||'unknown error')+'. Changes are held on this device.')}}
+  })();
+  return()=>{live=false};
+ },[userId]);
+
+ useEffect(()=>{
+  if(sync==='loading'||!synced.current.state)return;
+  const changes=diff(synced.current.state,state,synced.current.levels,picked);
+  if(isEmpty(changes))return;
+  const id=setTimeout(async()=>{
+   setSync('saving');
+   try{
+    await save(userId,changes);
+    synced.current={state,levels:picked};
+    setSync('ready');
+   }catch(err){setSync('error');setNotice('Could not save to your account: '+(err?.message||'unknown error'))}
+  },900);
+  return()=>clearTimeout(id);
+ },[state,picked,sync,userId]);
 
  const due=useMemo(()=>words.filter(w=>!state.known[w.id]&&state.cards[w.id]?.due<=time),[state.cards,state.known,time]);
  const collected=Object.keys(state.lib).length;
@@ -74,7 +130,10 @@ function App(){
     {name==='Play'&&!!due.length&&<span className="nav-dot"/>}</button>)}
   </React.Fragment>)}</nav>
   <div className="sidebar-bottom"><div className="tiny-palace">é</div><strong>A little, every day.</strong><p>Build a world you can remember.</p>
-   <div className="local"><span/> Progress saved on this device</div></div>
+   <div className={'local '+sync}>{sync==='error'?<><CloudOff size={12}/> Not syncing — changes held here</>
+    :sync==='saving'?<><RefreshCw size={12} className="spin"/> Saving…</>
+    :<><span/> Synced to your account</>}</div>
+   <button className="signout" onClick={()=>supabase.auth.signOut()}><LogOut size={14}/> {session.user.email}</button></div>
  </aside>
 
  <main><header><div><span className="eyebrow">YOUR SOUND PALACE</span><span className="header-divider">/</span>{page}</div>
@@ -106,7 +165,7 @@ function App(){
      <p>{state.notes[w.id]||scene(w)}</p>
      <details><summary>Make this scene yours</summary>
       <textarea aria-label="Your mnemonic" key={w.id} defaultValue={state.notes[w.id]||''} placeholder="Make the meaning concrete, exaggerated, and personal…"
-       onBlur={e=>setState(s=>({...s,notes:{...s.notes,[w.id]:e.target.value}}))}/>
+       onBlur={e=>setState(s=>({...s,notes:{...s.notes,[w.id]:e.target.value},lib:s.known[w.id]?s.lib:{...s.lib,[w.id]:s.lib[w.id]||Date.now()}}))}/>
       <small>Your scene saves when you leave this field.</small></details></div>
     <div className="example"><button aria-label="Listen to example" onClick={()=>say(w.example)}><Volume2 size={18}/></button>
      <div><p lang="fr">{w.example}</p><span>{w.translation}</span></div></div>
@@ -176,8 +235,16 @@ function App(){
   const count=words.filter(x=>x.level===l&&(state.lib[x.id]||state.known[x.id])).length;
   return <article key={l}><strong>{l}</strong><em>{levelBlurb[l]}</em><div className="progress-track"><i style={{width:count/total*100+'%'}}/></div>
    <span>{count.toLocaleString()} / {total.toLocaleString()}</span></article>})}</div>
+ <section className="account"><h3>Your account.</h3>
+  <div className="account-row"><strong>{session.user.email}</strong>
+   <span className={'sync-pill '+sync}>{sync==='error'?<><CloudOff size={13}/> not syncing</>
+    :sync==='saving'?<><RefreshCw size={13} className="spin"/> saving</>
+    :sync==='loading'?<><RefreshCw size={13} className="spin"/> loading</>
+    :<><Check size={13}/> synced</>}</span>
+   <button className="ghost-btn" onClick={()=>supabase.auth.signOut()}><LogOut size={15}/> Sign out</button></div>
+  <p>Your library, known words, review schedule, and personal scenes live on your account and follow you to any device you sign in on.</p></section>
  <section className="backup"><h3>Keep your memories.</h3>
-  <p>Your library, known words, review schedule, and personal scenes live in this browser. Export a backup to move devices or protect against cleared browser data. Import replaces your current progress.</p>
+  <p>Your library, known words, review schedule, and personal scenes sync to your account, so they follow you to any device you sign in on. An export is still worth keeping as an offline backup; importing replaces your current progress and syncs the result up.</p>
   <button onClick={exportData}><Download size={17}/> Export progress</button>
   <label className="import"><Upload size={17}/> Restore backup<input type="file" accept="application/json" onChange={importData}/></label></section>
  <details className="sources"><summary>About the vocabulary & sources</summary>
@@ -186,4 +253,4 @@ function App(){
 
  <footer><span>écho <i>·</i> Make French unforgettable.</span><button onClick={()=>setPage('Progress')}>Local progress & sources</button></footer></main></div>;
 }
-createRoot(document.getElementById('root')).render(<App/>);
+createRoot(document.getElementById('root')).render(<Root/>);

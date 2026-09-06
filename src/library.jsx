@@ -32,8 +32,8 @@ export default function Library({words,state,setState,picked,setPicked,notice,op
 
  const setKnown=w=>setState(st=>{const lib={...st.lib};delete lib[w.id];return {...st,known:{...st.known,[w.id]:Date.now()},lib}});
  const restore=w=>setState(st=>{const known={...st.known};delete known[w.id];return {...st,known,lib:{...st.lib,[w.id]:Date.now()}}});
- const drop=w=>setState(st=>{const lib={...st.lib},known={...st.known},cards={...st.cards};
-  delete lib[w.id];delete known[w.id];delete cards[w.id];return {...st,lib,known,cards}});
+ const drop=w=>setState(st=>{const lib={...st.lib},known={...st.known},cards={...st.cards},notes={...st.notes};
+  delete lib[w.id];delete known[w.id];delete cards[w.id];delete notes[w.id];return {...st,lib,known,cards,notes}});
 
  return <>
   <div className="page-title"><div className="eyebrow">YOUR WORDS</div><h1>The library.</h1>
