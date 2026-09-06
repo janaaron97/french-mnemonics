@@ -77,31 +77,32 @@ kbd{font:600 10px/1 'DM Sans',sans-serif;border:1px solid currentColor;border-ra
 .arena-eyebrow{font-size:10px;letter-spacing:1.8px;font-weight:700;color:#7e9a86}
 .cloze{font-family:Georgia,serif;font-size:31px;line-height:1.5;margin:26px 0 10px;letter-spacing:-.4px;overflow-wrap:anywhere}
 .cloze b{display:inline-block;min-width:3.2em;text-align:center;font-weight:400;border-bottom:3px solid #e3b552;padding:0 .2em;transition:.2s}
-.cloze b.gap::before{content:'?';color:#e3b552;opacity:.55}
+.cloze b.gap:empty::before{content:'?';color:#e3b552;opacity:.55}
 .cloze b.right{border-color:#6fd8a0;color:#8ff0bb}
 .cloze b.wrong{border-color:#ef7361;color:#ff9b8c}
 .recall-prompt{margin-top:22px}
 .recall-prompt .cloze{margin-top:8px;color:#f3e2b8}
 .arena-gloss{font-size:14px;color:#8fa894;margin:0 0 20px;line-height:1.6}
-.arena-hint{background:#ffffff0d;border-radius:10px;padding:13px;margin-bottom:18px;display:grid;justify-items:center;gap:8px}
+.arena-hint{background:#ffffff0d;border-radius:10px;padding:13px;margin:14px 0 0;display:grid;justify-items:center;gap:8px}
 .arena-hint .cue strong{color:#cfe2d3}
 .arena-hint .cue small{color:#8aa791}
 .arena-hint small{font-size:11px;color:#7e9a86}
-.arena-card .hint-btn{color:#8fae97;border-color:#3c5c48;margin-bottom:18px}
-.arena-card .hint-btn kbd{opacity:.4}
-.options{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-.option{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;align-items:center;text-align:left;background:#ffffff0d;border:1px solid #2f4c3c;border-radius:11px;padding:15px 17px;color:#e8f0e6;transition:.15s}
-.option kbd{grid-row:span 2;font-size:11px;padding:5px 7px;color:#7e9a86}
-.option strong{font-family:Georgia,serif;font-size:20px;font-weight:400}
-.option small{font-size:11.5px;color:#8fa894;grid-column:2}
-.option:hover:not(:disabled){background:#ffffff18;border-color:#5d8a6c;transform:translateY(-2px)}
-.option:disabled{opacity:1}
-.option.right{background:#1f6b45;border-color:#6fd8a0}
-.option.right small{color:#b7e9cb}
-.option.wrong{background:#6e2b25;border-color:#ef7361;animation:shake .32s}
-.option.wrong small{color:#f2c0b8}
-.option.dim{opacity:.35}
+.typing{display:flex;gap:10px;margin:4px 0 14px}
+.answer-field{flex:1;min-width:0;background:#ffffff0d;border:1px solid #3a5c48;border-radius:11px;padding:15px 18px;color:#f2f7f0;font-family:Georgia,serif;font-size:22px;outline:0;transition:.16s}
+.answer-field::placeholder{font-family:'DM Sans',sans-serif;font-size:17px;letter-spacing:4px;color:#5d7a67}
+.answer-field:focus{border-color:#e3b552;background:#ffffff14;box-shadow:0 0 0 3px #e3b55226}
+.answer-field.right{border-color:#6fd8a0;background:#1f6b4533;color:#8ff0bb}
+.answer-field.wrong{border-color:#ef7361;background:#6e2b2533;color:#ff9b8c;animation:shake .32s}
+.typing .primary{background:#e3b552;color:#16241e;font-weight:700;gap:10px;padding:13px 22px;flex-shrink:0}
+.typing .primary:hover{background:#f0cb77}
 @keyframes shake{25%{transform:translateX(-6px)}50%{transform:translateX(6px)}75%{transform:translateX(-3px)}}
+.accents{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.accents button{width:38px;height:36px;border:1px solid #2f4c3c;border-radius:8px;background:#ffffff0a;color:#c6dccd;font-family:Georgia,serif;font-size:17px;transition:.14s}
+.accents button:hover{background:#ffffff1a;border-color:#5d8a6c}
+.accents button:active{transform:translateY(1px)}
+.assists{display:flex;align-items:center;gap:18px;flex-wrap:wrap;font-size:11.5px;color:#7e9a86}
+.assists .hint-btn{color:#8fae97;border-color:#3c5c48;font-size:11.5px}
+.slip{font-size:12px;color:#b6ccbb}
 .verdict{margin-top:20px;border-top:1px solid #2a4437;padding-top:18px;display:grid;gap:12px;animation:deal .25s}
 .verdict-head{display:flex;align-items:center;gap:13px;flex-wrap:wrap}
 .verdict-head strong{font-family:Manrope,sans-serif;font-size:20px;font-weight:700;color:#8ff0bb}
@@ -211,9 +212,12 @@ kbd{font:600 10px/1 'DM Sans',sans-serif;border:1px solid currentColor;border-ra
  .arena{padding:10px 10px 32px}
  .arena-card{padding:20px 17px;border-radius:14px}
  .cloze{font-size:24px;margin-top:20px}
- .options{grid-template-columns:1fr;gap:9px}
- .option{padding:13px 15px}
- .option strong{font-size:18px}
+ .typing{flex-direction:column;gap:8px}
+ .typing .primary{justify-content:center}
+ .answer-field{font-size:20px;padding:14px 16px}
+ .accents{gap:5px}
+ .accents button{width:calc((100% - 25px)/6);height:38px}
+ .assists{gap:12px}
  .summary{padding-top:34px}
  .stack{height:390px;margin-top:34px}
  .stack-edge{top:-24px;transform:none;font-size:9px}

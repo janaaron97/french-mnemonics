@@ -1,6 +1,6 @@
 # Écho — French sound palace
 
-A client-side React vocabulary trainer ready for Netlify. Includes 5,500 unique French entries with IPA, meanings, example sentences, source-estimated A1–C1 levels, reusable pronunciation mnemonics, a multiple-choice cloze game, swipe triage across the whole A1–C1 range, a personal word library, personal scene editing, device-local spaced repetition, vocabulary search, a sound reference atlas, and JSON progress export/import.
+A client-side React vocabulary trainer ready for Netlify. Includes 5,500 unique French entries with IPA, meanings, example sentences, source-estimated A1–C1 levels, reusable pronunciation mnemonics, a typed cloze game, swipe triage across the whole A1–C1 range, a personal word library, personal scene editing, device-local spaced repetition, vocabulary search, a sound reference atlas, and JSON progress export/import.
 
 ## Run
 
@@ -24,7 +24,9 @@ npm run build
 
 ## Play, sort, collect
 
-**Play** is a cloze round. A sentence appears with one word blanked and four options underneath; keys `1`–`4` answer, `H` reveals the sound cues, `Esc` leaves. Where the entry's lemma does not appear verbatim in its own example sentence (about 16% of the corpus, mostly conjugated verbs), the card asks for the word from its English meaning instead, and the sentence is revealed after you answer. Correct answers score 100 plus 25 per streak step, capped at eight steps.
+**Play** is a cloze round. A sentence appears with one word blanked and you type the missing word; the sentence fills in as you type. `Enter` checks, `Enter` again moves on, `Esc` leaves. Where the entry's lemma does not appear verbatim in its own example sentence (about 16% of the corpus, mostly conjugated verbs), the card asks you to spell the word from its English meaning instead, and the sentence is revealed after you answer.
+
+Answers are compared case-insensitively and with surrounding whitespace ignored, but **accents count**: a spelling that is right apart from its diacritics scores half and is graded Hard rather than Good, with the correct spelling shown. An accent row sits under the input for keyboards that cannot reach `é è ê à â î ï ô û ù ç œ`. Each card also shows the answer's letter count, an optional sound-cue hint, and a reveal button that counts the card as missed. A clean answer scores 100 plus 25 per streak step, capped at eight steps.
 
 Answering a card puts **every word of that sentence** into your library, not just the target. Sentence words are matched back to corpus entries with a rule-based inflection table — regular `-er`/`-ir`/`-re` endings, noun and adjective agreement, elisions such as `j'`/`l'`/`qu'`, and about fifty hand-written irregular verbs. Canonical entries always win over generated forms, so a real headword is never shadowed by another word's inflection. It is a heuristic, not a parser: rare forms are missed, and a look-alike form can attach to the wrong lemma.
 
@@ -61,4 +63,4 @@ Game answers feed the same schedule as the Learn tab: a correct answer counts as
 - Vocabulary knowledge alone does not constitute C1 proficiency. The dataset omits some function words and is not a complete language course.
 - Fonts load from Google Fonts with local fallbacks. Audio uses the browser's speech service and may require internet. Learning data and progress need no backend.
 
-Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, review scheduling, inflected sentence-word matching, cloze construction and its corpus-wide coverage, deterministic option sets, session queue filtering, and backup migration and rejection. A production build is also checked. Browser interaction tests are not included.
+Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, review scheduling, inflected sentence-word matching, cloze construction and its corpus-wide coverage, accepted answers and letter counts, typed-answer checking and its accent tolerance, session queue filtering, and backup migration and rejection. A production build is also checked. Browser interaction tests are not included.

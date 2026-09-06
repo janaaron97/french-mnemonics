@@ -124,29 +124,21 @@ export function blank(w){
   if(m[0].toLowerCase()===target)return {before:w.example.slice(0,m.index),answer:m[0],after:w.example.slice(m.index+m[0].length)};
  return null;
 }
-export function rng(seed){let a=(seed>>>0)||1;return()=>{a=a+0x6d2b79f5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-export function shuffle(items,rand){const a=[...items];for(let i=a.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-const buckets=new WeakMap();
-function byPos(list){
- let b=buckets.get(list);
- if(!b){b=new Map();for(const w of list){const p=posOf(w);if(!b.has(p))b.set(p,[]);b.get(p).push(w)}buckets.set(list,b)}
- return b;
-}
-export function distractors(w,list,count=3,rand=Math.random){
- const bank=byPos(list).get(posOf(w))||list;
- const near=bank.filter(x=>x.level===w.level&&x.id!==w.id);
- const source=near.length>=count*4?near:bank;
- const picked=[],taken=new Set([w.word.toLowerCase()]);
- for(let guard=0;picked.length<count&&guard<600;guard++){
-  const c=source[Math.floor(rand()*source.length)];
-  if(!c||taken.has(c.word.toLowerCase()))continue;
-  taken.add(c.word.toLowerCase());picked.push(c);
- }
- return picked;
-}
-export function card(w,list,rand=Math.random){
+const bare=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/œ/g,'oe').replace(/æ/g,'ae');
+const tidy=s=>String(s).trim().toLowerCase().normalize('NFC').replace(/[\u2019\u02bc]/g,"'").replace(/\s+/g,' ');
+export function card(w){
  const cut=blank(w);
- return {id:w.id,word:w,kind:cut?'cloze':'recall',before:cut?.before||'',answer:cut?.answer||w.word,after:cut?.after||'',options:shuffle([w,...distractors(w,list,3,rand)],rand)};
+ const answer=cut?cut.answer:w.word;
+ return {id:w.id,word:w,kind:cut?'cloze':'recall',before:cut?.before||'',after:cut?.after||'',answer,
+  accepts:cut?[answer]:[w.word,w.article].filter(Boolean),length:answer.length};
+}
+export function check(typed,accepts){
+ const given=tidy(typed);
+ if(!given)return 'empty';
+ const wanted=accepts.map(tidy);
+ if(wanted.includes(given))return 'exact';
+ if(wanted.some(a=>bare(a)===bare(given)))return 'accent';
+ return 'wrong';
 }
 const inRange=(w,picked)=>!picked?.length||picked.includes(w.level);
 export function queue({words,mode='discover',levels:picked,progress,now=Date.now(),size=10}){

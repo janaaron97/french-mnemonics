@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,rng,queue,migrate,validate,levels} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,queue,migrate,validate,levels} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -33,17 +33,34 @@ test('a cloze blanks the lemma where the sentence uses it verbatim',()=>{
  const covered=words.filter(w=>blank(w)).length;
  assert.ok(covered/words.length>.8,`only ${covered} of ${words.length} entries can be clozed`);
 });
-test('cards are four unique options including the answer',()=>{
- const rand=rng(11);
- for(const w of [words[0],words[500],words[3000],words[5499]]){
-  const c=card(w,words,rand);
-  assert.equal(c.options.length,4);
-  assert.equal(new Set(c.options.map(o=>o.word)).size,4);
-  assert.ok(c.options.some(o=>o.id===w.id));
-  assert.equal(c.kind,blank(w)?'cloze':'recall');
-  if(c.kind==='cloze')assert.equal(c.before+c.answer+c.after,w.example);
- }
- assert.deepEqual(card(words[0],words,rng(4)).options.map(o=>o.id),card(words[0],words,rng(4)).options.map(o=>o.id));
+test('cards carry the answer they accept and its length',()=>{
+ const gap=card(words.find(w=>w.word==='encore'));
+ assert.equal(gap.kind,'cloze');
+ assert.equal(gap.before+gap.answer+gap.after,gap.word.example);
+ assert.deepEqual(gap.accepts,['encore']);
+ assert.equal(gap.length,6);
+ const spoken=card(words[0]);
+ assert.equal(spoken.kind,'recall');
+ assert.equal(spoken.answer,'être');
+ const noun=card(words.find(w=>w.word==='fardeau'));
+ assert.deepEqual(noun.accepts,['fardeau']);
+ assert.deepEqual(card({...words[0],example:'x'}).accepts,['être']);
+ assert.deepEqual(card({...words[0],article:'le être',example:'x'}).accepts,['être','le être']);
+ for(const w of words){const c=card(w);assert.ok(c.length>0&&c.accepts.length,w.word)}
+});
+test('typed answers tolerate case and spacing, not missing accents',()=>{
+ assert.equal(check('encore',['encore']),'exact');
+ assert.equal(check('  Encore ',['encore']),'exact');
+ assert.equal(check('',['encore']),'empty');
+ assert.equal(check('   ',['encore']),'empty');
+ assert.equal(check('ici',['encore']),'wrong');
+ assert.equal(check('eleve',['élève']),'accent');
+ assert.equal(check('élève',['élève']),'exact');
+ assert.equal(check('francais',['français']),'accent');
+ assert.equal(check('soeur',['sœur']),'accent');
+ assert.equal(check('aujourd\u2019hui',["aujourd'hui"]),'exact');
+ assert.equal(check('le fardeau',['fardeau','le fardeau']),'exact');
+ assert.equal(check('etre',['être']),'accent');
 });
 test('sessions skip known words and honour the level range',()=>{
  const known={[words[0].id]:1,[words[1].id]:1};
