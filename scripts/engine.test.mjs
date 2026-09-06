@@ -75,21 +75,26 @@ test('discover walks A1 to C1 in order, skipping known words',()=>{
  const known={[words[0].id]:1};
  assert.ok(!ladder(words,known).some(w=>w.id===words[0].id));
 });
-test('a discover round resumes after the last new word, wrapping when spent',()=>{
+test('discover resumes at the first word you have neither met nor retired',()=>{
  const order=ladder(words,{});
  const first=queue({words,mode:'discover',progress:{},size:5});
  assert.deepEqual(first.map(w=>w.id),order.slice(0,5).map(w=>w.id));
- const next=queue({words,mode:'discover',progress:{cursor:first[4].id},size:5});
+ // answering a word gives it a card, which is what moves the ladder on
+ const cards=Object.fromEntries(first.map(w=>[w.id,{due:Date.now()+9e8,interval:1,reviews:1}]));
+ const next=queue({words,mode:'discover',progress:{cards},size:5});
  assert.deepEqual(next.map(w=>w.id),order.slice(5,10).map(w=>w.id));
- const unknownCursor=queue({words,mode:'discover',progress:{cursor:-1},size:3});
- assert.deepEqual(unknownCursor.map(w=>w.id),order.slice(0,3).map(w=>w.id));
+ // so does retiring one
+ const known={[order[0].id]:1};
+ assert.equal(queue({words,mode:'discover',progress:{known},size:1})[0].id,order[1].id);
+ // a stale resume point from an older scheme cannot drag progress into B2
+ assert.equal(queue({words,mode:'discover',progress:{cursor:402},size:1})[0].level,'A1');
  assert.deepEqual(queue({words,mode:'discover',progress:{known:Object.fromEntries(words.map(w=>[w.id,1]))}}),[]);
 });
 test('due reviews weave into discover without crowding out progress',()=>{
  const now=1e12;
  const late=words.slice(3000,3040);
  const cards=Object.fromEntries(late.map((w,i)=>[w.id,{due:now-1000-i,interval:2,reviews:1}]));
- const round=queue({words,mode:'discover',progress:{cards,cursor:0},now,size:10});
+ const round=queue({words,mode:'discover',progress:{cards},now,size:10});
  assert.equal(round.length,10);
  const reviews=round.filter(w=>cards[w.id]).length;
  assert.equal(reviews,5,'reviews should take at most half the round');
@@ -97,9 +102,9 @@ test('due reviews weave into discover without crowding out progress',()=>{
  assert.ok(round.every(w=>!cards[w.id]||cards[w.id].due<=now),'only due cards weave in');
  // a word already scheduled but not yet due stays out of the round entirely
  const later={[words[4000].id]:{due:now+1e9,interval:9,reviews:1}};
- assert.ok(!queue({words,mode:'discover',progress:{cards:later,cursor:0},now,size:10}).some(w=>w.id===words[4000].id));
+ assert.ok(!queue({words,mode:'discover',progress:{cards:later},now,size:10}).some(w=>w.id===words[4000].id));
  // with nothing due, the round is all progression
- assert.equal(queue({words,mode:'discover',progress:{cursor:0},now,size:6}).length,6);
+ assert.equal(queue({words,mode:'discover',progress:{},now,size:6}).length,6);
 });
 test('weave spreads the second list through the first',()=>{
  assert.deepEqual(weave([1,2,3,4,5,6],['a']),[1,2,3,'a',4,5,6]);

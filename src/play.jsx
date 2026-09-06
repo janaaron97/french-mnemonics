@@ -71,8 +71,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    const lib={...st.lib};
    for(const id of ids)if(!st.known[id]&&!lib[id])lib[id]=now;
    const {next}=applyGrade({...st,lib,days:addDay(st.days)},c.id,grades[outcome],now);
-   // only a new word moves the ladder on; a woven review is not progress
-   return {...next,xp:next.xp+gain,cursor:v.mode==='discover'&&!st.cards[c.id]?c.id:next.cursor};
+   return {...next,xp:next.xp+gain};
   });
   const streak=ok?v.streak+1:0;
   setS({...v,result,outcome,typed,gain,taught:teaching,mastered:climbed,score:v.score+gain,streak,best:Math.max(v.best,streak),

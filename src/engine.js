@@ -295,21 +295,17 @@ export function weave(main,extra){
 }
 
 export function queue({words,mode='discover',progress,now=Date.now(),size=10}){
- const {cards={},lib={},known={},cursor=0}=progress||{};
+ const {cards={},lib={},known={}}=progress||{};
  const due=words.filter(w=>!known[w.id]&&cards[w.id]&&cards[w.id].due<=now)
   .sort((a,b)=>cards[a.id].due-cards[b.id].due);
  if(mode==='review')return due.slice(0,size);
  if(mode==='library')return words.filter(w=>lib[w.id]&&!known[w.id])
   .sort((a,b)=>(cards[a.id]?cards[a.id].due:now+1)-(cards[b.id]?cards[b.id].due:now+1)).slice(0,size);
 
- const order=ladder(words,known);
- if(!order.length)return [];
- // resume by rank, not by index, so a cursor word later marked known — and
- // therefore absent from the ladder — does not send progress back to the start
- const mark=cursor&&words.find(w=>w.id===cursor);
- const after=mark?order.findIndex(w=>rank[w.level]>rank[mark.level]||(w.level===mark.level&&w.id>mark.id)):-1;
- const from=mark?(after<0?0:after):0;
- const unseen=[...order.slice(from),...order.slice(0,from)].filter(w=>!cards[w.id]);
+ // There is no stored resume point: the next new word is simply the first one
+ // on the ladder you have neither met nor retired. Nothing to drift, nothing to
+ // migrate, and marking a word known or answering one moves it on by itself.
+ const unseen=ladder(words,known).filter(w=>!cards[w.id]);
  // reviews take at most half a round, so progression never stalls behind them
  const reviews=due.slice(0,Math.floor(size/2));
  const fresh=unseen.slice(0,size-reviews.length);
