@@ -1,6 +1,6 @@
 # Écho — French sound palace
 
-A client-side React vocabulary trainer ready for Netlify. Includes 5,500 unique French entries with IPA, meanings, example sentences, source-estimated A1–C1 levels, reusable pronunciation mnemonics, personal scene editing, device-local spaced repetition, vocabulary search, a sound reference atlas, and JSON progress export/import.
+A client-side React vocabulary trainer ready for Netlify. Includes 5,500 unique French entries with IPA, meanings, example sentences, source-estimated A1–C1 levels, reusable pronunciation mnemonics, a multiple-choice cloze game, swipe triage across the whole A1–C1 range, a personal word library, personal scene editing, device-local spaced repetition, vocabulary search, a sound reference atlas, and JSON progress export/import.
 
 ## Run
 
@@ -22,6 +22,26 @@ npm test
 npm run build
 ```
 
+## Play, sort, collect
+
+**Play** is a cloze round. A sentence appears with one word blanked and four options underneath; keys `1`–`4` answer, `H` reveals the sound cues, `Esc` leaves. Where the entry's lemma does not appear verbatim in its own example sentence (about 16% of the corpus, mostly conjugated verbs), the card asks for the word from its English meaning instead, and the sentence is revealed after you answer. Correct answers score 100 plus 25 per streak step, capped at eight steps.
+
+Answering a card puts **every word of that sentence** into your library, not just the target. Sentence words are matched back to corpus entries with a rule-based inflection table — regular `-er`/`-ir`/`-re` endings, noun and adjective agreement, elisions such as `j'`/`l'`/`qu'`, and about fifty hand-written irregular verbs. Canonical entries always win over generated forms, so a real headword is never shadowed by another word's inflection. It is a heuristic, not a parser: rare forms are missed, and a look-alike form can attach to the wrong lemma.
+
+Three decks feed a round:
+
+- **Discover** walks the corpus in frequency order across the selected levels, resuming from where the last round left off. This is the way to progress through the language without first curating a library.
+- **My library** draws only from words you have collected, due ones first.
+- **Due reviews** draws whatever the spaced-repetition schedule has brought back around.
+
+Every deck skips words marked known. You can mark a word known mid-round with **I know this**, which drops it from the current deck and the library, or from the round summary.
+
+**Sort** is one-gesture triage over the whole selected range. Swipe or drag right to add a word to your library, left to mark it known, down to skip labelling so it returns in a later session. Arrow keys do the same on a keyboard, `U` undoes the last card, and buttons do the same for anyone not using gestures.
+
+**Library** is the dedicated view of your own words: studying, known, or everything you have met, with search, an optional level filter, and per-word actions to mark known, restore to studying, or remove entirely. Removing a word also discards its review schedule.
+
+The level range is a set, not a single level — pick any combination from A1 to C1, or the whole span at once. It is shared across Play, Sort, Learn, and Vocabulary, and persists between visits.
+
 ## The mnemonic system
 
 IPA, rather than spelling, determines each scene. Consonants are a fixed cast of characters, vowels and nasal vowels are distinct locations, and glides are objects that move the scene. Read them in sound order and have them act out the meaning. Recurring sequences such as /sjɔ̃/ and /mɑ̃/ are reusable compressed props. These are mnemonic chunks, not claims about etymology or morphological segmentation. Gender is a golden key (masculine) or silver ribbon (feminine) when the source article identifies it. Elided articles do not determine gender.
@@ -30,7 +50,7 @@ The apostrophe-like aspirated-h marker is excluded from sound tokens: it indicat
 
 Each entry starts with a generated scene-building prompt. Personalize it by opening **Make this scene yours**; the text saves on blur. These prompts are not 5,500 individually authored stories. Browser French text-to-speech reads words and example sentences; voice quality and availability depend on the device. No pronunciation assessment is performed.
 
-Review ratings schedule Again in one minute, Hard at 1.2× the previous interval (minimum one day), Good at 2.5× (minimum one day), and Easy at 3.5× (minimum four days). Intervals round to whole days. This is a simple interval scheduler, not FSRS. Progress is local to the browser; exporting backups is essential for moving devices or clearing browser data. Import replaces current progress.
+Game answers feed the same schedule as the Learn tab: a correct answer counts as Good, a wrong one as Again. Review ratings schedule Again in one minute, Hard at 1.2× the previous interval (minimum one day), Good at 2.5× (minimum one day), and Easy at 3.5× (minimum four days). Intervals round to whole days. This is a simple interval scheduler, not FSRS. Progress is local to the browser; exporting backups is essential for moving devices or clearing browser data. Import replaces current progress. Backups written before the library existed are still accepted: every word they had a review card for becomes a library word.
 
 ## Content provenance and limitations
 
@@ -41,4 +61,4 @@ Review ratings schedule Again in one minute, Hard at 1.2× the previous interval
 - Vocabulary knowledge alone does not constitute C1 proficiency. The dataset omits some function words and is not a complete language course.
 - Fonts load from Google Fonts with local fallbacks. Audio uses the browser's speech service and may require internet. Learning data and progress need no backend.
 
-Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, and review scheduling. A production build is also checked. Browser interaction tests are not included.
+Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, review scheduling, inflected sentence-word matching, cloze construction and its corpus-wide coverage, deterministic option sets, session queue filtering, and backup migration and rejection. A production build is also checked. Browser interaction tests are not included.

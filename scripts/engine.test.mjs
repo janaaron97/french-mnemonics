@@ -1,9 +1,80 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,rng,queue,migrate,validate,levels} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
 test('review intervals grow, failure retries in a minute',()=>{const initial=schedule(null,'good',0);assert.equal(initial.due,86400000);const next=schedule(initial,'good',initial.due);assert.equal(next.interval,3);assert.equal(next.reviews,2);const failed=schedule(next,'again',500);assert.equal(failed.due,60500);assert.equal(failed.interval,0);assert.equal(schedule(next,'hard',0).interval,4);assert.equal(schedule(null,'easy',0).interval,4)});
 test('gender cues follow supplied noun articles',()=>{assert.match(scene({ipa:'ʃa',meaning:'cat',article:'le chat'}),/golden key/);assert.match(scene({ipa:'ly n',meaning:'moon',article:'la lune'}),/silver ribbon/)});
+test('inflected sentence words resolve back to their corpus entries',()=>{
+ const say=(s)=>sentenceIds(s,words).map(id=>words[id-1].word);
+ assert.deepEqual(say('Je suis étudiant.'),['être','étudiant']);
+ assert.ok(say('Nous avons faim.').includes('avoir'));
+ assert.ok(say('Il a couru rapidement pour attraper le bus.').includes('courir'));
+ assert.ok(say('C’est la même chose.').includes('même'));
+ assert.ok(say("L'homme mange des pommes vertes.").includes('vert'));
+ assert.deepEqual(say('Zzzz qqqq.'),[]);
+ const both=sentenceIds('Je suis étudiant. Je suis étudiant.',words);
+ assert.equal(new Set(both).size,both.length);
+});
+test('canonical entries always win over generated inflections',()=>{
+ const index=formIndex(words);
+ for(const w of words)assert.equal(index.get(w.word.toLowerCase().normalize('NFC')),w.id,w.word);
+ assert.equal(words[index.get('suis')-1].word,'être');
+});
+test('a cloze blanks the lemma where the sentence uses it verbatim',()=>{
+ const cut=blank({word:'fardeau',example:'Ce travail est devenu un lourd fardeau pour lui.'});
+ assert.equal(cut.answer,'fardeau');
+ assert.equal(cut.before,'Ce travail est devenu un lourd ');
+ assert.equal(cut.after,' pour lui.');
+ assert.equal(blank({word:'être',example:'Je suis étudiant.'}),null);
+ assert.equal(blank({word:'tout',example:'Tout le monde est là.'}).answer,'Tout');
+ const covered=words.filter(w=>blank(w)).length;
+ assert.ok(covered/words.length>.8,`only ${covered} of ${words.length} entries can be clozed`);
+});
+test('cards are four unique options including the answer',()=>{
+ const rand=rng(11);
+ for(const w of [words[0],words[500],words[3000],words[5499]]){
+  const c=card(w,words,rand);
+  assert.equal(c.options.length,4);
+  assert.equal(new Set(c.options.map(o=>o.word)).size,4);
+  assert.ok(c.options.some(o=>o.id===w.id));
+  assert.equal(c.kind,blank(w)?'cloze':'recall');
+  if(c.kind==='cloze')assert.equal(c.before+c.answer+c.after,w.example);
+ }
+ assert.deepEqual(card(words[0],words,rng(4)).options.map(o=>o.id),card(words[0],words,rng(4)).options.map(o=>o.id));
+});
+test('sessions skip known words and honour the level range',()=>{
+ const known={[words[0].id]:1,[words[1].id]:1};
+ const discover=queue({words,mode:'discover',levels:['A1'],progress:{known},size:5});
+ assert.equal(discover.length,5);
+ assert.ok(discover.every(w=>w.level==='A1'&&!known[w.id]));
+ const resumed=queue({words,mode:'discover',levels:['A1'],progress:{known,cursor:discover[4].id},size:3});
+ assert.ok(resumed[0].id>discover[4].id);
+ const lib={[words[9].id]:1,[words[0].id]:1};
+ const mine=queue({words,mode:'library',levels:levels,progress:{lib,known},size:9});
+ assert.deepEqual(mine.map(w=>w.id),[words[9].id]);
+ const now=1e12;
+ const cards={[words[4].id]:{due:now-1,interval:1,reviews:1},[words[5].id]:{due:now+1e9,interval:9,reviews:1}};
+ assert.deepEqual(queue({words,mode:'review',progress:{cards,known},now,size:9}).map(w=>w.id),[words[4].id]);
+ assert.deepEqual(queue({words,mode:'discover',levels:['A1'],progress:{known:Object.fromEntries(words.map(w=>[w.id,1]))}}),[]);
+});
+test('older backups migrate, malformed ones are refused',()=>{
+ const old={version:1,cards:{'1':{due:5,interval:1,reviews:1}},notes:{'2':'mine'}};
+ const moved=validate(old,words);
+ assert.deepEqual(Object.keys(moved.lib),['1']);
+ assert.equal(moved.version,2);
+ assert.equal(moved.notes['2'],'mine');
+ assert.equal(moved.xp,0);
+ assert.ok(moved.sound);
+ const round=validate(JSON.parse(JSON.stringify({...moved,known:{'3':7},xp:250})),words);
+ assert.equal(round.known['3'],7);
+ assert.equal(round.xp,250);
+ assert.equal(validate({version:3,cards:{}},words),null);
+ assert.equal(validate({version:2,cards:{'999999':{due:1,interval:1,reviews:1}}},words),null);
+ assert.equal(validate({version:2,known:{'999999':1}},words),null);
+ assert.equal(validate({version:2,notes:{'1':5}},words),null);
+ assert.equal(validate(null,words),null);
+ assert.equal(migrate(null).cursor,0);
+});

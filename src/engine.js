@@ -7,3 +7,176 @@ export const chunks=[{ipa:'sjɔ̃',name:'Transformation machine',emoji:'⚙️',
 export function tokenize(ipa,compact=true){const keys=[...(compact?chunks:[]),...sounds].sort((a,b)=>b.ipa.length-a.ipa.length);let rest=ipa.normalize('NFC').replace(/[ʼˈˌ.\s/()‿]/g,'');let out=[];while(rest){const key=keys.find(s=>rest.startsWith(s.ipa));if(key){out.push(key);rest=rest.slice(key.ipa.length)}else{out.push({ipa:[...rest][0],name:'Unmapped sound',emoji:'◌',type:'unknown'});rest=rest.slice([...rest][0].length)}}return out}
 export function scene(w){const cues=tokenize(w.ipa);return `Picture ${cues.map(c=>c.type==='vowel'||c.type==='nasal'?`a scene at the ${c.name.toLowerCase()}`:c.name.toLowerCase()).join(' → ')}. In that exact order, make them act out “${w.meaning}”. ${w.article?.startsWith('la ')?'Add a silver ribbon to mark feminine gender.':w.article?.startsWith('le ')?'Add a golden key to mark masculine gender.':'If the article hides gender, check a dictionary before adding a gender prop.'}`}
 export function schedule(previous,grade,now=Date.now()){const old=previous?.interval||0;const interval=grade==='again'?0:grade==='hard'?Math.max(1,Math.round(old*1.2)):grade==='good'?Math.max(1,Math.round(old*2.5)):Math.max(4,Math.round(old*3.5));return {interval,due:now+(grade==='again'?60000:interval*86400000),reviews:(previous?.reviews||0)+1,last:now};}
+export const levels=['A1','A2','B1','B2','C1'];
+export const levelBlurb={A1:'First steps',A2:'Everyday life',B1:'New horizons',B2:'Going deeper',C1:'Nuance'};
+const posAlias={nom:'noun',adj:'adjective',adv:'adverb',num:'numeral'};
+export const posOf=w=>posAlias[w.pos]||w.pos||'other';
+const irregular={
+ 'être':'suis es est sommes êtes sont étais était étions étiez étaient été fus fut furent serai seras sera serons serez seront serais serait soit sois soyons soyez soient étant',
+ 'avoir':'ai as a avons avez ont avais avait avions aviez avaient eu eue eus eut eurent aurai auras aura aurons aurez auront aurais aurait aie aies ait ayons ayez aient ayant',
+ 'aller':'vais vas va allons allez vont allais allait allions alliez allaient allé allée allés allées irai iras ira irons irez iront irais irait aille ailles aillent allant',
+ 'faire':'fais fait faisons faites font faisais faisait faisions faisaient faite faits faites ferai feras fera ferons ferez feront ferais ferait fasse fasses fassent faisant',
+ 'pouvoir':'peux peut pouvons pouvez peuvent pouvais pouvait pouvions pouviez pouvaient pu pourrai pourras pourra pourrons pourrez pourront pourrais pourrait puisse puissent pouvant',
+ 'vouloir':'veux veut voulons voulez veulent voulais voulait voulions vouliez voulaient voulu voulue voudrai voudras voudra voudrons voudront voudrais voudrait veuille veuillez voulant',
+ 'devoir':'dois doit devons devez doivent devais devait devions deviez devaient dû due dus dues devrai devras devra devrons devront devrais devrait doive doivent devant',
+ 'savoir':'sais sait savons savez savent savais savait savions saviez savaient su sue saurai sauras saura saurons sauront saurais saurait sache sachons sachez sachent sachant',
+ 'venir':'viens vient venons venez viennent venais venait venions veniez venaient venu venue venus venues vins vint viendrai viendras viendra viendrons viendront viendrais viendrait vienne viennent venant',
+ 'tenir':'tiens tient tenons tenez tiennent tenais tenait tenaient tenu tenue tiendrai tiendra tiendrais tienne tenant',
+ 'prendre':'prends prend prenons prenez prennent prenais prenait prenions preniez prenaient pris prise prises prendrai prendras prendra prendrons prendront prendrais prendrait prenne prennent prenant',
+ 'voir':'vois voit voyons voyez voient voyais voyait voyions voyiez voyaient vu vue vus vues verrai verras verra verrons verront verrais verrait voie voient voyant',
+ 'dire':'dis dit disons dites disent disais disait disions disiez disaient dite dits dites dirai diras dira dirons diront dirais dirait dise disent disant',
+ 'mettre':'mets met mettons mettez mettent mettais mettait mettaient mis mise mises mettrai mettra mettrons mettront mettrais mettrait mette mettent mettant',
+ 'falloir':'faut fallait faudra faudrait fallu',
+ 'valoir':'vaut valent valait valaient valu vaudra vaudrait vaille valant',
+ 'connaître':'connais connaît connaissons connaissez connaissent connaissais connaissait connaissaient connu connue connus connues connaîtrai connaîtrait connaisse connaissant',
+ 'paraître':'parais paraît paraissons paraissez paraissent paraissait paraissaient paru paraîtra paraîtrait paraissant',
+ 'partir':'pars part partons partez partent partais partait partaient parti partie partis parties partirai partira partirait parte partant',
+ 'sortir':'sors sort sortons sortez sortent sortais sortait sortaient sorti sortie sortis sorties sortirai sortira sortirait sorte sortant',
+ 'dormir':'dors dort dormons dormez dorment dormais dormait dormi dormirai dormirait dorme dormant',
+ 'servir':'sers sert servons servez servent servais servait servi servie servirai servirait serve servant',
+ 'sentir':'sens sent sentons sentez sentent sentais sentait senti sentie sentirai sentirait sente sentant',
+ 'écrire':'écris écrit écrivons écrivez écrivent écrivais écrivait écrivaient écrite écrits écrites écrirai écrira écrirait écrive écrivant',
+ 'lire':'lis lit lisons lisez lisent lisais lisait lisaient lu lue lus lues lirai lira lirait lise lisant',
+ 'boire':'bois boit buvons buvez boivent buvais buvait bu bue bus bues boirai boirait boive buvant',
+ 'croire':'crois croit croyons croyez croient croyais croyait cru crue crus crues croirai croirait croie croyant',
+ 'recevoir':'reçois reçoit recevons recevez reçoivent recevais recevait reçu reçue reçus reçues recevrai recevrait reçoive recevant',
+ 'vivre':'vis vit vivons vivez vivent vivais vivait vécu vécue vécus vivrai vivrait vive vivant',
+ 'suivre':'suit suivons suivez suivent suivais suivait suivi suivie suivis suivies suivrai suivrait suive suivant',
+ 'ouvrir':'ouvre ouvres ouvrons ouvrez ouvrent ouvrais ouvrait ouvert ouverte ouverts ouvertes ouvrirai ouvrirait ouvrant',
+ 'offrir':'offre offres offrons offrez offrent offrais offrait offert offerte offerts offertes offrirai offrant',
+ 'courir':'cours court courons courez courent courais courait couru courue courrai courrait coure courant',
+ 'mourir':'meurs meurt mourons mourez meurent mourais mourait mort morte morts mortes mourra mourrait meure mourant',
+ 'naître':'nais naît naissons naissez naissent naissait né née nés nées naîtra naissant',
+ 'rire':'ris rit rions riez rient riais riait ri rirai rirait rie riant',
+ 'plaire':'plais plaît plaisons plaisez plaisent plaisait plu plaira plairait plaise plaisant',
+ 'craindre':'crains craint craignons craignez craignent craignait craint crainte craindra craindrait craigne craignant',
+ 'joindre':'joins joint joignons joignez joignent joignait jointe joindra joindrait joigne joignant',
+ 'peindre':'peins peint peignons peignez peignent peignait peinte peindra peindrait peigne peignant',
+ 'conduire':'conduis conduit conduisons conduisez conduisent conduisait conduite conduira conduirait conduise conduisant',
+ 'produire':'produis produit produisons produisez produisent produisait produite produira produirait produise produisant',
+ 'construire':'construis construit construisons construisez construisent construisait construite construira construirait construise construisant',
+ 'battre':'bats bat battons battez battent battait battu battue battra battrait batte battant',
+ 'perdre':'perds perd perdons perdez perdent perdais perdait perdu perdue perdus perdues perdra perdrait perde perdant',
+ 'attendre':'attends attend attendons attendez attendent attendais attendait attendu attendue attendra attendrait attende attendant',
+ 'répondre':'réponds répond répondons répondez répondent répondais répondait répondu répondue répondra répondrait réponde répondant',
+ 'vendre':'vends vend vendons vendez vendent vendais vendait vendu vendue vendra vendrait vende vendant',
+ 'rendre':'rends rend rendons rendez rendent rendais rendait rendu rendue rendra rendrait rende rendant',
+ 'entendre':'entends entend entendons entendez entendent entendais entendait entendu entendue entendra entendrait entende entendant',
+ 'descendre':'descends descend descendons descendez descendent descendait descendu descendue descendra descendant',
+ 'appeler':'appelle appelles appellent appellerai appellera appellerait appelant appelé appelée appelés appelées',
+ 'jeter':'jette jettes jettent jetterai jettera jetterait jetant jeté jetée',
+ 'acheter':'achète achètes achètent achèterai achètera achèterait achetant acheté achetée',
+ 'lever':'lève lèves lèvent lèverai lèvera lèverait levant levé levée',
+ 'préférer':'préfère préfères préfèrent préférerai préférerait préférant préféré préférée',
+ 'espérer':'espère espères espèrent espérerai espérerait espérant espéré espérée',
+ 'envoyer':'envoie envoies envoient enverrai enverra enverrait envoyant envoyé envoyée envoyés',
+ 'payer':'paie paies paient paye payes payent paierai paiera paierait payant payé payée',
+ 'essayer':'essaie essaies essaient essaye essayerai essaiera essaierait essayant essayé essayée',
+ 'manger':'mange manges mangent mangeons mangeais mangeait mangeaient mangerai mangera mangerait mangeant mangé mangée mangés',
+ 'commencer':'commence commences commencent commençons commençais commençait commencerai commencera commencerait commençant commencé commencée'};
+const elided={j:'je',l:'le',d:'de',n:'ne',c:'ce',s:'se',m:'me',t:'te',qu:'que',lorsqu:'lorsque',puisqu:'puisque',quoiqu:'quoique',jusqu:'jusque',quelqu:'quelque'};
+const inflectable=new Set(['noun','adjective','numeral']);
+export function forms(w){
+ const base=w.word.toLowerCase().normalize('NFC'),p=posOf(w),out=[base];
+ if(irregular[base])out.push(...irregular[base].split(' '));
+ if(/[\s'’]/.test(base))return out;
+ const add=(stem,tails)=>out.push(...tails.split(' ').map(t=>stem+t));
+ if(p==='verb'){
+  if(base.endsWith('er'))add(base.slice(0,-2),'e es ent ons ez ais ait ions iez aient é és ée ées ant erai eras era erons erez eront erais erait erions eriez eraient');
+  else if(base.endsWith('oir'))add(base.slice(0,-3),'ois oit oyons oyez oient oyais oyait u us ue ues');
+  else if(base.endsWith('ir'))add(base.slice(0,-2),'is it issons issez issent issais issait issaient i ie ies irai iras ira irons iront irais irait issant');
+  else if(base.endsWith('re'))add(base.slice(0,-2),'s t ons ez ent ais ait aient u us ue ues rai ra rons ront rais rait ant');
+ }else if(inflectable.has(p)){
+  if(base.endsWith('al'))out.push(base.slice(0,-2)+'aux');
+  if(/(eau|eu)$/.test(base))out.push(base+'x');
+  if(!/[sxz]$/.test(base))out.push(base+'s');
+  if(p==='adjective'){
+   if(base.endsWith('x'))add(base.slice(0,-1),'se ses');
+   else if(base.endsWith('f'))add(base.slice(0,-1),'ve ves');
+   else if(base.endsWith('er'))add(base.slice(0,-2),'ère ères');
+   else if(base.endsWith('eux'))add(base.slice(0,-1),'se ses');
+   else if(!base.endsWith('e'))add(base,'e es');
+  }
+ }
+ return out;
+}
+const indexes=new WeakMap();
+export function formIndex(list){
+ let map=indexes.get(list);
+ if(map)return map;
+ map=new Map();
+ for(const w of list){const k=w.word.toLowerCase().normalize('NFC');if(!map.has(k))map.set(k,w.id)}
+ for(const w of list)for(const f of forms(w))if(f.length>1&&!map.has(f))map.set(f,w.id);
+ indexes.set(list,map);
+ return map;
+}
+export function sentenceIds(sentence,list){
+ const map=formIndex(list),ids=[];
+ for(const raw of String(sentence).toLowerCase().normalize('NFC').match(/\p{L}+(?:['’]\p{L}+)*(?:-\p{L}+)*/gu)||[]){
+  const parts=map.has(raw)?[raw]:raw.split(/['’-]/).map((p,i,a)=>i<a.length-1&&elided[p]?elided[p]:p);
+  for(const part of parts){const id=map.get(part);if(id&&!ids.includes(id))ids.push(id)}
+ }
+ return ids;
+}
+export function blank(w){
+ const target=w.word.toLowerCase().normalize('NFC');
+ for(const m of String(w.example).normalize('NFC').matchAll(/\p{L}+/gu))
+  if(m[0].toLowerCase()===target)return {before:w.example.slice(0,m.index),answer:m[0],after:w.example.slice(m.index+m[0].length)};
+ return null;
+}
+export function rng(seed){let a=(seed>>>0)||1;return()=>{a=a+0x6d2b79f5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+export function shuffle(items,rand){const a=[...items];for(let i=a.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+const buckets=new WeakMap();
+function byPos(list){
+ let b=buckets.get(list);
+ if(!b){b=new Map();for(const w of list){const p=posOf(w);if(!b.has(p))b.set(p,[]);b.get(p).push(w)}buckets.set(list,b)}
+ return b;
+}
+export function distractors(w,list,count=3,rand=Math.random){
+ const bank=byPos(list).get(posOf(w))||list;
+ const near=bank.filter(x=>x.level===w.level&&x.id!==w.id);
+ const source=near.length>=count*4?near:bank;
+ const picked=[],taken=new Set([w.word.toLowerCase()]);
+ for(let guard=0;picked.length<count&&guard<600;guard++){
+  const c=source[Math.floor(rand()*source.length)];
+  if(!c||taken.has(c.word.toLowerCase()))continue;
+  taken.add(c.word.toLowerCase());picked.push(c);
+ }
+ return picked;
+}
+export function card(w,list,rand=Math.random){
+ const cut=blank(w);
+ return {id:w.id,word:w,kind:cut?'cloze':'recall',before:cut?.before||'',answer:cut?.answer||w.word,after:cut?.after||'',options:shuffle([w,...distractors(w,list,3,rand)],rand)};
+}
+const inRange=(w,picked)=>!picked?.length||picked.includes(w.level);
+export function queue({words,mode='discover',levels:picked,progress,now=Date.now(),size=10}){
+ const {cards={},lib={},known={},cursor=0}=progress||{};
+ if(mode==='review')return words.filter(w=>!known[w.id]&&cards[w.id]&&cards[w.id].due<=now).sort((a,b)=>cards[a.id].due-cards[b.id].due).slice(0,size);
+ if(mode==='library')return words.filter(w=>lib[w.id]&&!known[w.id]&&inRange(w,picked))
+  .sort((a,b)=>(cards[a.id]?cards[a.id].due:now+1)-(cards[b.id]?cards[b.id].due:now+1)).slice(0,size);
+ const open=words.filter(w=>!known[w.id]&&inRange(w,picked));
+ if(!open.length)return [];
+ const from=Math.max(0,open.findIndex(w=>w.id>cursor));
+ return [...open.slice(from),...open.slice(0,from)].slice(0,size);
+}
+const plain=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
+export const empty={version:2,cards:{},notes:{},lib:{},known:{},cursor:0,xp:0,best:0,rounds:0,sound:true};
+export function migrate(saved){
+ if(!saved||typeof saved!=='object'||Array.isArray(saved))return {...empty};
+ const out={...empty,...saved,version:2,cards:plain(saved.cards),notes:plain(saved.notes),lib:plain(saved.lib),known:plain(saved.known)};
+ if(!saved.lib)out.lib=Object.fromEntries(Object.keys(out.cards).map(id=>[id,0]));
+ for(const key of ['cursor','xp','best','rounds'])out[key]=Number.isFinite(out[key])?out[key]:0;
+ out.sound=out.sound!==false;
+ return out;
+}
+export function validate(data,words){
+ const d=plain(data);
+ if(d.version!==1&&d.version!==2)return null;
+ const ids=new Set(words.map(w=>String(w.id)));
+ for(const key of ['cards','notes','lib','known'])if(key in d&&plain(d[key])!==d[key])return null;
+ for(const [id,c] of Object.entries(plain(d.cards)))
+  if(!ids.has(id)||!c||!Number.isFinite(c.due)||!Number.isFinite(c.interval)||c.interval<0||!Number.isFinite(c.reviews))return null;
+ for(const [id,n] of Object.entries(plain(d.notes)))if(!ids.has(id)||typeof n!=='string')return null;
+ for(const key of ['lib','known'])for(const id of Object.keys(plain(d[key])))if(!ids.has(id))return null;
+ return migrate(d);
+}
