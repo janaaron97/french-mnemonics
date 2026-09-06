@@ -9,6 +9,7 @@ import Sort from './sort.jsx';
 import Library from './library.jsx';
 import Auth from './auth.jsx';
 import Word from './word.jsx';
+import {useInstall,InstallPanel,InstallNudge} from './install.jsx';
 import {supabase,load,save,diff,isEmpty,hasContent} from './cloud.js';
 import './style.css';
 
@@ -180,6 +181,7 @@ function App({session}){
 
  const run=useMemo(()=>streak(state.days),[state.days]),bestRun=useMemo(()=>bestStreak(state.days),[state.days]);
  const rank=useMemo(()=>standing(state.points),[state.points]);
+ const install=useInstall();
  const dayline=useMemo(()=>studySeries(state.days,state.daily,30),[state.days,state.daily]);
  const matches=list=>list.filter(x=>(x.word+' '+x.meaning).toLowerCase().includes(query.toLowerCase()));
  const introduced=pool.filter(x=>state.cards[x.id]||state.known[x.id]).length;
@@ -223,7 +225,7 @@ function App({session}){
   </div></header>
  {notice&&<div role="status" className="notice">{notice}<button aria-label="Dismiss notification" onClick={()=>setNotice('')}><X size={16}/></button></div>}
 
- {page==='Play'&&<Play {...shared} launch={launch} onLaunched={()=>setLaunch(null)}/>}
+ {page==='Play'&&<><InstallNudge {...install}/><Play {...shared} launch={launch} onLaunched={()=>setLaunch(null)}/></>}
  {page==='Sort'&&<Sort {...shared}/>}
  {page==='Library'&&<Library {...shared} onPlay={toPlay}/>}
 
@@ -292,6 +294,7 @@ function App({session}){
   const count=words.filter(x=>x.level===l&&(state.lib[x.id]||state.known[x.id])).length;
   return <article key={l}><strong>{l}</strong><em>{levelBlurb[l]}</em><div className="progress-track"><i style={{width:count/total*100+'%'}}/></div>
    <span>{count.toLocaleString()} / {total.toLocaleString()}</span></article>})}</div>
+ <InstallPanel {...install}/>
  <section className="account"><h3>Sound check</h3>
   <div className="account-row">
    <button className="ghost-btn" onClick={()=>{unlockSound();tone([[660,0,.12],[880,.1,.16]],true);setCheck(soundReport())}}>Play a beep</button>
@@ -326,3 +329,8 @@ function App({session}){
  <footer><button onClick={()=>setPage('Progress')}>Sources & backup</button></footer></main></div>;
 }
 createRoot(document.getElementById('root')).render(<Root/>);
+// Registered only for a built app: in dev this would cache module requests and
+// fight hot reload. The worker keeps navigation network-first, so a deploy still
+// lands as soon as the device is online.
+if(import.meta.env.PROD&&'serviceWorker' in navigator)
+ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
