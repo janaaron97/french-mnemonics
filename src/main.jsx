@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
 import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,addDay,addStudy,mastery,spelledCount,standing,stage,streak,bestStreak,lastDays,studySeries,MASTERY} from './engine';
-import {LevelChips,Cues,speak,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud} from './ui';
+import {LevelChips,Cues,speak,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud,playFile,hasAudioSession,isApple} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
 import Library from './library.jsx';
@@ -90,7 +90,7 @@ function App({session}){
  const [state,setState]=useState(read),[page,setPage]=useState('Play'),[picked,setPicked]=useState(readLevels);
  const [query,setQuery]=useState(''),[selected,setSelected]=useState(null),[revealed,setRevealed]=useState(false);
  const [review,setReview]=useState(false),[notice,setNotice]=useState(''),[soundType,setSoundType]=useState('All');
- const [time,setTime]=useState(Date.now()),[launch,setLaunch]=useState(null),[drawer,setDrawer]=useState(false),[check,setCheck]=useState(null),[loud,setLoudOn]=useState(isLoud);
+ const [time,setTime]=useState(Date.now()),[launch,setLaunch]=useState(null),[drawer,setDrawer]=useState(false),[check,setCheck]=useState(null),[loud,setLoudOn]=useState(isLoud),[trial,setTrial]=useState({});
 
  useEffect(()=>{try{localStorage.setItem('echo-progress',JSON.stringify(state))}catch{setNotice('Browser storage is full or unavailable. Export your progress before leaving.')}},[state]);
  useEffect(()=>{try{localStorage.setItem('echo-levels',JSON.stringify(picked))}catch{}},[picked]);
@@ -296,18 +296,35 @@ function App({session}){
    <span>{count.toLocaleString()} / {total.toLocaleString()}</span></article>})}</div>
  <InstallPanel {...install}/>
  <section className="account"><h3>Sound check</h3>
+  <p>Three different pipelines carry sound, and iOS can mute them independently.
+   Try each: whichever one stays silent is the one at fault.</p>
+  <ol className="sound-tests">
+   <li><button className="ghost-btn" onClick={()=>{unlockSound();tone([[660,0,.12],[880,.1,.16]],true);
+    setTrial(t=>({...t,web:'triggered'}));setTimeout(()=>setCheck(soundReport()),400)}}>1 · Web Audio beep</button>
+    <span>{trial.web||'not tried'}</span></li>
+   <li><button className="ghost-btn" onClick={async()=>{unlockSound();setTrial(t=>({...t,file:'playing…'}));
+    const r=await playFile();setTrial(t=>({...t,file:r}));setCheck(soundReport())}}>2 · Audio file tone</button>
+    <span>{trial.file||'not tried'}</span></li>
+   <li><button className="ghost-btn" onClick={()=>{unlockSound();speak('Bonjour, ceci est un test.',setNotice);
+    setTrial(t=>({...t,speech:'queued'}));setTimeout(()=>setCheck(soundReport()),1200)}}>3 · Speak French</button>
+    <span>{trial.speech||'not tried'}</span></li>
+  </ol>
   <div className="account-row">
-   <button className="ghost-btn" onClick={()=>{unlockSound();tone([[660,0,.12],[880,.1,.16]],true);setCheck(soundReport())}}>Play a beep</button>
-   <button className="ghost-btn" onClick={()=>{unlockSound();speak('Bonjour, ceci est un test.',setNotice);setCheck(soundReport())}}>Speak French</button>
-   <button className="ghost-btn" onClick={()=>setCheck(soundReport())}>Refresh</button>
-  </div>
-  <div className="account-row">
-   <button className={'ghost-btn'+(loud?' on':'')} onClick={()=>{const next=!loud;setLoud(next);setLoudOn(next);setCheck(soundReport())}}>
-    Play through the silent switch: {loud?'on':'off'}</button>
+   <button className="ghost-btn" onClick={()=>setCheck(soundReport())}><RefreshCw size={15}/> Refresh</button>
+   <button className="ghost-btn" disabled={!check} onClick={()=>{
+    navigator.clipboard?.writeText(Object.entries(check||{}).map(([k,v])=>k+': '+v).join('\n'))
+     .then(()=>setNotice('Sound report copied.')).catch(()=>{})}}>Copy report</button>
+   {!hasAudioSession()&&<button className={'ghost-btn'+(loud?' on':'')} onClick={()=>{const next=!loud;setLoud(next);setLoudOn(next);setCheck(soundReport())}}>
+    Silent-switch hum: {loud?'on':'off'}</button>}
   </div>
   {check&&<dl className="report">{Object.entries(check).map(([k,v])=>
    <React.Fragment key={k}><dt>{k}</dt><dd>{String(v)}</dd></React.Fragment>)}</dl>}
-  <p>iOS silences web audio whenever the ringer switch is off. Leaving the setting above on holds a near-silent looping track so the phone treats this as playback rather than ambient sound, which the switch does not mute. The cost is that it can interrupt music or a podcast — turn it off if you would rather keep the switch honoured.</p>
+  <p><b>last started: no</b> with <b>last error: none</b> means the utterance was accepted and never
+   began — that is the phone muting it, not the app. An error of <i>not-allowed</i> means Safari refused
+   it for want of a gesture, and <i>interrupted</i> or <i>canceled</i> means something cut it off.</p>
+  {isApple()&&<p>{hasAudioSession()
+   ?'This Safari supports audioSession, so the page asks for a playback session directly and no silent-switch hum is used.'
+   :'This Safari is too old for audioSession, so a near-silent looping track is used instead to escape the ringer switch. It holds the output open, which can itself block speech — if test 3 stays silent while 1 and 2 work, turn the hum off and try again.'}</p>}
  </section>
  <section className="account"><h3>Your account.</h3>
   <div className="account-row"><strong>{session.user.email}</strong>

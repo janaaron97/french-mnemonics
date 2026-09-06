@@ -11,28 +11,55 @@ if(typeof window!=='undefined'&&window.speechSynthesis){
  try{window.speechSynthesis.addEventListener('voiceschanged',readVoices)}catch{window.speechSynthesis.onvoiceschanged=readVoices}
 }
 
-export function speak(text,notice,rate=.8){
+// Everything Safari gets wrong here is silent, so every attempt records what
+// happened — whether the utterance started, ended, or errored, and with what.
+// That readout is the only way to tell "muted" apart from "never began".
+export let heard={state:'nothing spoken yet'};
+export const lastSpoken=()=>heard;
+const ua=()=>(typeof navigator!=='undefined'&&navigator.userAgent)||'';
+export const isApple=()=>/iPad|iPhone|iPod/.test(ua())||(/Macintosh/.test(ua())&&navigator.maxTouchPoints>1);
+export const hasAudioSession=()=>typeof navigator!=='undefined'&&!!navigator.audioSession;
+
+export function speak(text,notice,rate=1){
  const synth=typeof window!=='undefined'&&window.speechSynthesis;
  if(!synth)return notice?.('Speech is unavailable in this browser. Use the IPA guide.');
  if(!voices.length)readVoices();
  const voice=voices.find(v=>/^fr/i.test(v.lang));
+ let u;
  try{
-  // Safari can be left paused when a tab is backgrounded, and cancelling when
-  // nothing is speaking sometimes swallows the next utterance outright.
-  if(synth.paused)synth.resume();
-  if(synth.speaking||synth.pending)synth.cancel();
-  const u=new SpeechSynthesisUtterance(String(text));
+  u=new SpeechSynthesisUtterance(String(text));
   u.lang=voice?.lang||'fr-FR';
   u.rate=Math.max(.5,Math.min(2,rate));
-  if(voice)u.voice=voice;
-  else if(voices.length)notice?.('No French voice on this device — using the default. Voice availability varies by browser.');
-  synth.speak(u);
- }catch{notice?.('Speech failed to start. Try again, or check your device volume.')}
+  // A voice object can go stale across a voiceschanged and be refused on
+  // assignment; the utterance is still perfectly usable with just a lang.
+  if(voice)try{u.voice=voice}catch{}
+ }catch(err){
+  heard={said:String(text).slice(0,32),started:'no',ended:'no',error:'could not build the utterance: '+(err&&err.message)};
+  return notice?.('Speech failed to start. Try again, or check your device volume.');
+ }
+ const t0=Date.now();
+ heard={said:String(text).slice(0,32),voice:voice?`${voice.name} (${voice.lang})`:'device default',
+  rate:u.rate,at:new Date().toLocaleTimeString(),started:'no',ended:'no',error:'none',
+  startedAfter:'—',wasSpeaking:String(!!synth.speaking),wasPaused:String(!!synth.paused)};
+ u.onstart=()=>{heard.started='yes';heard.startedAfter=(Date.now()-t0)+'ms';quiet(true)};
+ u.onend=()=>{heard.ended='yes';quiet(false)};
+ u.onerror=e=>{heard.error=(e&&e.error)||'unknown';quiet(false)};
+ if(!voice&&voices.length)notice?.('No French voice on this device — using the default. Voice availability varies by browser.');
+ const go=()=>{try{synth.speak(u)}catch(err){heard.error='threw: '+(err&&err.message);
+  notice?.('Speech failed to start. Try again, or check your device volume.')}};
+ try{
+  if(synth.paused)synth.resume();
+  // Safari drops an utterance queued in the same tick as cancel(), so when
+  // something really is speaking, cancel and queue on the next turn. The very
+  // first call never takes that path, so it keeps its user gesture.
+  if(synth.speaking||synth.pending){synth.cancel();setTimeout(go,0)}
+  else go();
+ }catch(err){heard.error='threw: '+(err&&err.message)}
 }
 
 // An AudioContext starts suspended and Safari only lets a real user gesture
 // resume it — and only truly unlocks once a buffer has actually played.
-let ctx,unlocked=false;
+let ctx,unlocked=false,warmed=false;
 function audio(){
  try{
   const Ctx=window.AudioContext||window.webkitAudioContext;
@@ -42,10 +69,15 @@ function audio(){
   return ctx;
  }catch{return null}
 }
+export const audioState=()=>ctx?ctx.state:'not created';
+export const isUnlocked=()=>unlocked;
+
 // iOS mutes the Web Audio and speech "ambient" session when the ringer switch
-// is off. A looping HTMLMediaElement moves the page into the playback session,
-// which the switch does not silence. It has to carry a non-zero waveform —
-// a genuinely silent or muted element stays ambient and changes nothing.
+// is off. Safari 16.4+ fixes that properly with navigator.audioSession; a
+// looping media element is only the fallback for older versions, and it is a
+// blunt one — it holds the output device open, which on some versions is
+// itself enough to stop speech coming out. So use the API where it exists,
+// hum only where it does not, and never hum over an utterance.
 const LOUD='echo-loud';
 export const isLoud=()=>{try{return localStorage.getItem(LOUD)!=='0'}catch{return true}};
 export function setLoud(on){
@@ -64,7 +96,7 @@ function hum(){
  return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
 }
 export function keepAwake(){
- if(keeper||!isLoud())return;
+ if(keeper||!isLoud()||hasAudioSession())return;
  try{
   keeperUrl=keeperUrl||hum();
   keeper=new Audio(keeperUrl);
@@ -77,6 +109,13 @@ export function stopAwake(){
  try{keeper?.pause()}catch{}
  keeper=null;
 }
+// Get out of the way while something is being said, then come back.
+function quiet(on){
+ if(!keeper)return;
+ try{on?keeper.pause():keeper.play().catch(()=>{})}catch{}
+}
+export const keeperState=()=>!isLoud()?'off':hasAudioSession()?'not needed (audioSession supported)'
+ :keeper?(keeper.paused?'paused':'running'):'not started';
 
 export function unlockSound(){
  // Safari 16.4+ only lets audio through the hardware silent switch when the
@@ -84,6 +123,18 @@ export function unlockSound(){
  // are both muted on a phone with the ringer off, with no error anywhere.
  try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback'}catch{}
  keepAwake();
+ // iOS only lets the FIRST utterance begin from inside a user gesture; every
+ // one after it is free. Spend that first one on a space nobody hears, so the
+ // real one later in a round is never the one being refused.
+ if(!warmed&&typeof window!=='undefined'&&window.speechSynthesis){
+  warmed=true;
+  try{
+   const w=new SpeechSynthesisUtterance(' ');
+   w.volume=0;w.rate=2;w.lang='fr-FR';
+   w.onerror=e=>{heard={state:'warm-up refused',error:(e&&e.error)||'unknown'}};
+   window.speechSynthesis.speak(w);
+  }catch{}
+ }
  const c=audio();
  if(!c||unlocked)return;
  try{
@@ -94,6 +145,7 @@ export function unlockSound(){
   unlocked=true;
  }catch{}
 }
+export const isWarmed=()=>warmed;
 export function useSoundUnlock(){
  useEffect(()=>{
   const on=()=>unlockSound();
@@ -104,6 +156,38 @@ export function useSoundUnlock(){
    window.removeEventListener('touchend',on);window.removeEventListener('keydown',on)};
  },[]);
 }
+// A real, audible tone through an <audio> element — a different pipeline from
+// WebAudio and from speech, so testing it separately says which one is muted.
+let toneUrl;
+export function beepFile(){
+ if(!toneUrl){
+  const rate=22050,len=Math.floor(rate*.45),buf=new ArrayBuffer(44+len*2),view=new DataView(buf);
+  const tag=(at,t)=>{for(let i=0;i<t.length;i++)view.setUint8(at+i,t.charCodeAt(i))};
+  tag(0,'RIFF');view.setUint32(4,36+len*2,true);tag(8,'WAVEfmt ');
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+  view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+  tag(36,'data');view.setUint32(40,len*2,true);
+  for(let i=0;i<len;i++){
+   const fade=Math.min(1,i/900,(len-i)/900);
+   view.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*660*i/rate)*12000*fade),true);
+  }
+  toneUrl=URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+ }
+ return toneUrl;
+}
+export function playFile(){
+ return new Promise(resolve=>{
+  try{
+   const a=new Audio(beepFile());
+   a.setAttribute('playsinline','');a.volume=1;
+   a.onended=()=>resolve('played to the end');
+   a.onerror=()=>resolve('element error: '+(a.error?a.error.code:'unknown'));
+   a.play().then(()=>{setTimeout(()=>resolve(a.paused?'started, then paused':'playing'),700)})
+    .catch(err=>resolve('play() rejected: '+(err&&err.name)+' '+(err&&err.message)));
+  }catch(err){resolve('threw: '+(err&&err.message))}
+ });
+}
+
 export function tone(steps,on=true){
  if(!on)return;
  const c=audio();
@@ -122,23 +206,29 @@ export function tone(steps,on=true){
 }
 export const buzz=ms=>{try{navigator.vibrate?.(ms)}catch{}};
 
-// Safari failures here are silent by nature, so make the state inspectable
-// rather than guessing at it from the outside.
+// Safari fails silently by design here, so make every layer inspectable: which
+// pipeline was asked, whether it began, and what it said if it refused.
 export function soundReport(){
  const synth=typeof window!=='undefined'&&window.speechSynthesis;
  const list=synth?(synth.getVoices()||[]):[];
  const fr=list.filter(v=>/^fr/i.test(v.lang));
+ const m=ua().match(/(?:iPhone )?OS (\d+[_.]\d+)|Version\/(\d+\.\d+)/);
  return {
-  audioContext:ctx?ctx.state:'not created',
-  unlocked,
-  audioSession:(typeof navigator!=='undefined'&&navigator.audioSession)?(navigator.audioSession.type||'default'):'unsupported',
-  silentSwitchOverride:isLoud()?(keeper&&!keeper.paused?'on and running':'on, not started'):'off',
+  device:isApple()?'Apple (iOS/iPadOS/Safari)':'other',
+  osOrSafari:m?(m[1]||m[2]).replace('_','.'):'unknown',
+  standalone:(()=>{try{return String(window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true)}catch{return '?'}})(),
+  audioContext:audioState(),
+  webAudioUnlocked:String(isUnlocked()),
+  speechWarmedUp:String(isWarmed()),
+  audioSession:hasAudioSession()?(navigator.audioSession.type||'default'):'unsupported',
+  silentSwitchHum:keeperState(),
   speech:synth?'available':'missing',
   voices:list.length,
   frenchVoices:fr.length,
   frenchVoice:fr[0]?`${fr[0].name} (${fr[0].lang})`:'none',
-  speaking:synth?!!synth.speaking:false,
-  paused:synth?!!synth.paused:false
+  speaking:synth?String(!!synth.speaking):'?',
+  paused:synth?String(!!synth.paused):'?',
+  ...Object.fromEntries(Object.entries(lastSpoken()).map(([k,v])=>['last '+k,v]))
  };
 }
 

@@ -821,3 +821,7 @@ footer{color:var(--dim)}
 .install-warn{font-size:12.5px;line-height:1.65;color:var(--muted);border-left:2px solid var(--gold);
  padding-left:12px;margin:0}
 .report dd{overflow-wrap:anywhere}
+.sound-tests{margin:0;padding-left:20px;display:grid;gap:10px}
+.sound-tests li{font-size:12.5px;color:var(--muted)}
+.sound-tests li>button{margin-right:10px}
+.sound-tests li>span{display:inline-block;margin-top:4px;font-family:Manrope,sans-serif;color:var(--text)}
