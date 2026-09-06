@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -202,8 +202,34 @@ test('review stages follow the interval, and known outranks them all',()=>{
 });
 test('mastery is clamped and safe on an unseen word',()=>{
  assert.equal(mastery(undefined),0);
- assert.equal(mastery({clean:99}),MASTERY);
+ assert.equal(mastery({spelled:99}),MASTERY);
+ assert.equal(mastery({clean:99}),MASTERY,'a card written before the split still reads its mastery');
+ assert.equal(mastery({clean:9,spelled:2}),2,'spelled wins once it exists');
  assert.equal(seen(undefined),0);
+ assert.equal(spelledCount(undefined),0);
+});
+test('an answer that never asked for the French logs but does not build mastery',()=>{
+ // clean/close/missed record every answer; only `spelled` retires a word.
+ let card=schedule(null,'good',0,false);
+ assert.deepEqual([card.clean,card.spelled,card.reviews],[1,0,1],'logged, but not spelled');
+ assert.equal(mastery(card),0);
+ card=schedule(card,'good',0,true);
+ assert.deepEqual([card.clean,card.spelled],[2,1]);
+ assert.equal(mastery(card),1);
+ // a card carried over from before the split keeps the mastery it had
+ assert.equal(schedule({clean:4,close:0,missed:0,reviews:4,interval:1},'good',0,false).spelled,4);
+ assert.equal(schedule({clean:4,close:0,missed:0,reviews:4,interval:1},'good',0,true).spelled,5);
+
+ let state={...fresh(),lib:{'42':1}};
+ for(let i=0;i<20;i++)state=applyGrade(state,'42','good',i,false).next;
+ assert.equal(state.known['42'],undefined,'twenty English answers must not retire the word');
+ assert.equal(mastery(state.cards['42']),0);
+ assert.equal(state.cards['42'].clean,20,'but every one of them is on the record');
+ assert.equal(seen(state.cards['42']),20);
+ for(let i=0;i<9;i++)state=applyGrade(state,'42','good',100+i,true).next;
+ assert.equal(state.known['42'],undefined);
+ const last=applyGrade(state,'42','good',200,true);
+ assert.equal(last.mastered,true,'the tenth written answer still retires it');
 });
 
 test('every mnemonic variant names the whole cast in order and lands on the meaning',()=>{

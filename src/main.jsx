@@ -2,7 +2,7 @@ import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
-import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
+import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,spelledCount,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
 import {LevelChips,Cues,speak,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
@@ -107,7 +107,7 @@ function App({session}){
  };
 
  const rate=grade=>{
-  const climbed=grade!=='again'&&grade!=='hard'&&!state.known[w.id]&&(state.cards[w.id]?.clean||0)+1>=MASTERY;
+  const climbed=grade!=='again'&&grade!=='hard'&&!state.known[w.id]&&spelledCount(state.cards[w.id])+1>=MASTERY;
   setState(s=>applyGrade(s,w.id,grade).next);
   setTime(Date.now());
   if(climbed)setNotice(`“${w.word}” reached ${MASTERY} clean answers and moved to your known words.`);

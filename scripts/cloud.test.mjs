@@ -7,10 +7,14 @@ const blank=()=>({...empty,cards:{},notes:{},aiNotes:{},phrases:{},notesOn:{},li
 const iso=ms=>new Date(ms).toISOString();
 
 test('outcome counters survive the round trip and drive writes',()=>{
- const s={...blank(),lib:{'7':1},cards:{'7':{due:9,interval:3,reviews:12,last:8,clean:5,close:3,missed:4}}};
+ const s={...blank(),lib:{'7':1},cards:{'7':{due:9,interval:3,reviews:12,last:8,clean:5,close:3,missed:4,spelled:2}}};
  const row=reviewRow(s,'7');
  assert.equal(row.clean,5);assert.equal(row.close,3);assert.equal(row.missed,4);assert.equal(row.reviews,12);
- assert.deepEqual(fromRows({reviews:[row]}).state.cards['7'],{due:9,interval:3,reviews:12,last:8,clean:5,close:3,missed:4});
+ assert.equal(row.spelled,2,'mastery travels separately from the answer log');
+ assert.deepEqual(fromRows({reviews:[row]}).state.cards['7'],{due:9,interval:3,reviews:12,last:8,clean:5,close:3,missed:4,spelled:2});
+ // a row written before the column existed reads its mastery back out of clean
+ assert.equal(fromRows({reviews:[{...row,spelled:null}]}).state.cards['7'].spelled,5);
+ assert.equal(reviewRow({...s,cards:{'7':{...s.cards['7'],spelled:undefined}}},'7').spelled,5);
  const bumped={...s,cards:{'7':{...s.cards['7'],clean:6}}};
  assert.deepEqual(diff(s,bumped,['A1'],['A1']).upReviews.map(r=>r.clean),[6]);
  assert.ok(isEmpty(diff(s,s,['A1'],['A1'])));
@@ -23,14 +27,14 @@ test('a studying word, a known word and a note round-trip through rows',()=>{
  assert.deepEqual(libraryRow(s,'7'),{word_id:7,note:'my scene',note_ai:false,sentence:null,sentence_en:null,explain:null,explain_of:null,known_at:null,added_at:iso(1000)});
  assert.deepEqual(libraryRow(s,'9'),{word_id:9,note:'',note_ai:false,sentence:null,sentence_en:null,explain:null,explain_of:null,known_at:iso(2000),added_at:iso(2000)});
  assert.equal(libraryRow(s,'11'),null);
- assert.deepEqual(reviewRow(s,'7'),{word_id:7,due:iso(5000),interval_days:3,reviews:2,last_reviewed:iso(4000),clean:0,close:0,missed:0});
+ assert.deepEqual(reviewRow(s,'7'),{word_id:7,due:iso(5000),interval_days:3,reviews:2,last_reviewed:iso(4000),clean:0,close:0,missed:0,spelled:0});
  assert.equal(reviewRow(s,'9'),null);
  const back=fromRows({library:[libraryRow(s,'7'),libraryRow(s,'9')],reviews:[reviewRow(s,'7')],
   state:{...stateRow(s,['A1','B1'])}});
  assert.deepEqual(back.state.lib,{'7':1000});
  assert.deepEqual(back.state.known,{'9':2000});
  assert.deepEqual(back.state.notes,{'7':'my scene'});
- assert.deepEqual(back.state.cards,{'7':{due:5000,interval:3,reviews:2,last:4000,clean:0,close:0,missed:0}});
+ assert.deepEqual(back.state.cards,{'7':{due:5000,interval:3,reviews:2,last:4000,clean:0,close:0,missed:0,spelled:0}});
  assert.deepEqual(back.levels,['A1','B1']);
 });
 test('an unchanged state produces no writes',()=>{

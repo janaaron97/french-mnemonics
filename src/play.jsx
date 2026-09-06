@@ -1,6 +1,6 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
 import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift} from 'lucide-react';
-import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,mastery,streak as dayStreak,MASTERY,posOf} from './engine';
+import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,mastery,spelledCount,streak as dayStreak,MASTERY,posOf} from './engine';
 import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor,composeFor} from './generate.js';
 
@@ -82,7 +82,10 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   const outcome=review?review.outcome:teaching?'missed':judge(result,shown>0),ok=outcome!=='missed';
   const earned=outcome==='clean'?points(v.streak):outcome==='close'?Math.round(points(v.streak)/2):0;
   const gain=earned+(review?.usedBonus?BONUS:0);
-  const climbed=outcome==='clean'&&!state.known[c.id]&&(state.cards[c.id]?.clean||0)+1>=MASTERY;
+  // Recognising the English is worth logging but is not the same skill as
+  // producing the French, so it never moves mastery.
+  const spells=c.kind!=='meaning';
+  const climbed=outcome==='clean'&&spells&&!state.known[c.id]&&spelledCount(state.cards[c.id])+1>=MASTERY;
   // Only the sentence rounds put a sentence in front of you, so only they have
   // words worth harvesting out of it.
   const ids=c.kind==='cloze'||c.kind==='recall'
@@ -91,7 +94,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   setState(st=>{
    const lib={...st.lib};
    for(const id of ids)if(!st.known[id]&&!lib[id])lib[id]=now;
-   const {next}=applyGrade({...st,lib,days:addDay(st.days)},c.id,grades[outcome],now);
+   const {next}=applyGrade({...st,lib,days:addDay(st.days)},c.id,grades[outcome],now,spells);
    return {...next,xp:next.xp+gain};
   });
   const streak=ok?v.streak+1:0;
@@ -102,6 +105,10 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    missed:ok?v.missed:[...v.missed,c.word]});
   tone(outcome==='clean'?[[660,0,.09],[880,.08,.14]]:outcome==='close'?[[620,0,.1],[700,.09,.12]]:[[190,0,.18,'sawtooth']],state.sound);
   buzz(ok?18:[28,40,28]);
+  // Hearing it is half of learning it, so say the word the moment the answer
+  // lands, in every mode. Spoken here rather than on a timer: iOS only lets
+  // speech start from inside the gesture that asked for it.
+  if(state.sound)speak(c.kind==='cloze'?c.answer:c.word.word,notice);
  };
  const [grading,setGrading]=useState(false);
  // The sentence round is marked by the model, but whether the two words are
@@ -230,7 +237,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    <p className="prompt-gloss">{c.kind==='cloze'?c.word.translation:c.kind==='recall'&&result?c.word.example:''}</p>
 
    {!result&&<div className="accents">{ACCENTS.map(ch=><button key={ch} type="button" tabIndex={-1} onClick={()=>accent(ch)}>{ch}</button>)}</div>}
-   <div className="mastery-dots" aria-label={'Mastery '+cleanSoFar+' of '+MASTERY}>
+   <div className={'mastery-dots'+(c.kind==='meaning'?' idle':'')}
+    aria-label={'Mastery '+cleanSoFar+' of '+MASTERY+(c.kind==='meaning'?', not advanced by this round':'')}>
     {Array.from({length:MASTERY},(_,i)=><i key={i} className={i<cleanSoFar?'on':''}/>)}</div>
    {shown>0&&!result&&spellable&&<div className="letters" aria-label={'First '+shown+' letters'}>
     {[...c.answer].map((ch,i)=><span key={i} className={i<shown?'on':''}>{i<shown?ch:'·'}</span>)}</div>}
@@ -278,7 +286,9 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
     {result==='wrong'&&!s.taught&&!!s.typed.trim()&&<span className="slip">You wrote “{s.typed.trim()}”.</span>}
     {s.mastered
      ?<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>
-     :s.outcome==='clean'&&<span className="collected"><Sparkles size={13}/> mastery {cleanSoFar}/{MASTERY}</span>}
+     :c.kind==='meaning'
+      ?<span className="slip">Logged against the word. Mastery holds at {cleanSoFar}/{MASTERY} — only writing the French moves it.</span>
+      :s.outcome==='clean'&&<span className="collected"><Sparkles size={13}/> mastery {cleanSoFar}/{MASTERY}</span>}
     {!!s.collected&&<span className="collected"><Sparkles size={13}/> {s.collected} sentence word{s.collected===1?'':'s'} saved to your library</span>}
    </div>}
 

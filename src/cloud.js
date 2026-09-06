@@ -22,7 +22,9 @@ export function fromRows({library=[],reviews=[],state=null}){
  }
  for(const r of reviews)out.cards[String(r.word_id)]={
   due:ms(r.due),interval:r.interval_days,reviews:r.reviews,last:ms(r.last_reviewed),
-  clean:r.clean||0,close:r.close||0,missed:r.missed||0};
+  clean:r.clean||0,close:r.close||0,missed:r.missed||0,
+  // rows written before mastery split off from the outcome log carry neither
+  spelled:r.spelled==null?(r.clean||0):r.spelled};
  if(state){
   out.xp=Number(state.xp)||0;out.rounds=state.rounds||0;out.best=state.best||0;
   out.cursor=state.cursor||0;out.sound=state.sound!==false;
@@ -47,7 +49,8 @@ export const reviewRow=(s,id)=>{
  if(!c)return null;
  const count=n=>Math.max(0,Math.round(n||0));
  return {word_id:Number(id),due:stamp(c.due),interval_days:count(c.interval),reviews:count(c.reviews),
-  last_reviewed:c.last?stamp(c.last):null,clean:count(c.clean),close:count(c.close),missed:count(c.missed)};
+  last_reviewed:c.last?stamp(c.last):null,clean:count(c.clean),close:count(c.close),missed:count(c.missed),
+  spelled:count(c.spelled==null?c.clean:c.spelled)};
 };
 export const stateRow=(s,picked)=>({
  xp:Math.max(0,Math.round(s.xp||0)),rounds:Math.max(0,s.rounds||0),best:Math.max(0,s.best||0),
@@ -79,7 +82,7 @@ export const hasContent=s=>!!(Object.keys(s.lib).length||Object.keys(s.known).le
 export async function load(userId){
  const [library,reviews,state]=await Promise.all([
   supabase.from('echo_library').select('word_id,note,note_ai,sentence,sentence_en,explain,explain_of,known_at,added_at').eq('user_id',userId),
-  supabase.from('echo_reviews').select('word_id,due,interval_days,reviews,last_reviewed,clean,close,missed').eq('user_id',userId),
+  supabase.from('echo_reviews').select('word_id,due,interval_days,reviews,last_reviewed,clean,close,missed,spelled').eq('user_id',userId),
   supabase.from('echo_state').select('xp,rounds,best,cursor,sound,levels,days').eq('user_id',userId).maybeSingle()
  ]);
  for(const r of [library,reviews,state])if(r.error)throw r.error;

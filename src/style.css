@@ -528,6 +528,7 @@ footer{color:var(--dim)}
 .mastery-dots{display:flex;gap:5px;justify-content:center;order:-1;margin-bottom:2px}
 .mastery-dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--line)}
 .mastery-dots i.on{background:var(--green);border-color:var(--green)}
+.mastery-dots.idle i.on{background:var(--dim);border-color:var(--dim)}
 .answered-tools,.sent-tools{display:flex;align-items:center;gap:4px;background:var(--raise);border-radius:12px;padding:6px;flex-wrap:wrap}
 .answered-tools button,.sent-tools button{display:inline-flex;align-items:center;gap:7px;color:var(--muted);
  padding:9px 13px;border-radius:9px;font-size:12.5px}

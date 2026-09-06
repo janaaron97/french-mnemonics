@@ -25,7 +25,7 @@ function Row({w,card,known,now,open,onToggle,actions}){
    <div><strong lang="fr">{w.article||w.word}</strong><span>/{w.ipa}/ · {posOf(w)}</span></div>
    <div className="lib-meaning">{w.meaning}</div>
   </button>
-  <div className="mastery" title={done+' of '+MASTERY+' clean answers'} aria-label={'Mastery '+done+' of '+MASTERY}>
+  <div className="mastery" title={done+' of '+MASTERY+' answers written cleanly'} aria-label={'Mastery '+done+' of '+MASTERY}>
    <div className="pips">{Array.from({length:MASTERY},(_,i)=><i key={i} className={i<done?'done':''}/>)}</div>
    <small>{known?'mastered':done+'/'+MASTERY}</small>
   </div>
@@ -35,10 +35,10 @@ function Row({w,card,known,now,open,onToggle,actions}){
   {open&&<div className="lib-detail">
    <div className="detail-grid">
     <article><strong>{total}</strong><span>times seen</span></article>
-    <article><strong className="ok">{clean}</strong><span>clean</span></article>
+    <article><strong className="ok">{clean}</strong><span>right</span></article>
     <article><strong className="warn">{close}</strong><span>close</span></article>
     <article><strong className="bad">{missed}</strong><span>missed</span></article>
-    <article><strong>{total?Math.round(clean/total*100):0}%</strong><span>clean rate</span></article>
+    <article><strong>{total?Math.round(clean/total*100):0}%</strong><span>right first time</span></article>
    </div>
    {!!total&&<div className="split" role="img" aria-label={`${clean} clean, ${close} close, ${missed} missed`}>
     {clean>0&&<i className="ok" style={{flex:clean}}/>}

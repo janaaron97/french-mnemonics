@@ -109,16 +109,23 @@ export function alternates(w,list){
 }
 export const MASTERY=10;
 const tally={again:'missed',hard:'close',good:'clean',easy:'clean'};
-export function schedule(previous,grade,now=Date.now()){
+// clean/close/missed log every answer, whichever round it came from. `spelled`
+// is the subset where you actually produced the French, and it alone drives
+// mastery — recognising the English is worth recording, but it is not the same
+// skill as writing the word. Cards from before the split fall back to `clean`,
+// which is what mastery used to mean, so no stored progress moves.
+export const spelledCount=card=>card?.spelled??card?.clean??0;
+export function schedule(previous,grade,now=Date.now(),spells=true){
  const old=previous?.interval||0;
  const interval=grade==='again'?0:grade==='hard'?Math.max(1,Math.round(old*1.2)):grade==='good'?Math.max(1,Math.round(old*2.5)):Math.max(4,Math.round(old*3.5));
  const hit=tally[grade];
  return {interval,due:now+(grade==='again'?60000:interval*86400000),reviews:(previous?.reviews||0)+1,last:now,
   clean:(previous?.clean||0)+(hit==='clean'?1:0),
   close:(previous?.close||0)+(hit==='close'?1:0),
-  missed:(previous?.missed||0)+(hit==='missed'?1:0)};
+  missed:(previous?.missed||0)+(hit==='missed'?1:0),
+  spelled:spelledCount(previous)+(hit==='clean'&&spells?1:0)};
 }
-export const mastery=card=>Math.min(MASTERY,card?.clean||0);
+export const mastery=card=>Math.min(MASTERY,spelledCount(card));
 export const seen=card=>card?.reviews||0;
 export function stage(card,known){
  if(known)return {key:'known',label:'Known'};
@@ -129,11 +136,13 @@ export function stage(card,known){
  return {key:'locked',label:'Locked in'};
 }
 // One place decides what a graded answer does: it schedules the card, keeps the
-// word in the library, and retires it once it has been spelled cleanly MASTERY times.
-export function applyGrade(state,id,grade,now=Date.now()){
- const card=schedule(state.cards[id],grade,now);
+// word in the library, and retires it once it has been spelled cleanly MASTERY
+// times. `spells` is false for a round that never asks you to write the French,
+// so it logs the answer without moving mastery.
+export function applyGrade(state,id,grade,now=Date.now(),spells=true){
+ const card=schedule(state.cards[id],grade,now,spells);
  const cards={...state.cards,[id]:card};
- if(card.clean>=MASTERY&&!state.known[id]){
+ if(card.spelled>=MASTERY&&!state.known[id]){
   const lib={...state.lib};delete lib[id];
   return {next:{...state,cards,lib,known:{...state.known,[id]:now}},mastered:true};
  }

@@ -80,14 +80,16 @@ export default function Word({w,words,state,setState,notice,review,revealed,setR
   </div>
 
   <div className="word-stats">
-   <article><strong>{done}<em>/{MASTERY}</em></strong><span>mastery</span>
+   <article><strong>{done}<em>/{MASTERY}</em></strong><span>written cleanly</span>
     <div className="pips">{Array.from({length:MASTERY},(_,i)=><i key={i} className={i<done?'done':''}/>)}</div></article>
    <article><strong>{total}</strong><span>times seen</span></article>
-   <article><strong className="ok">{card?.clean||0}</strong><span>clean</span></article>
+   <article><strong className="ok">{card?.clean||0}</strong><span>right</span></article>
    <article><strong className="warn">{card?.close||0}</strong><span>close</span></article>
    <article><strong className="bad">{card?.missed||0}</strong><span>missed</span></article>
-   <article><strong>{total?Math.round((card.clean||0)/total*100):0}%</strong><span>clean rate</span></article>
+   <article><strong>{total?Math.round((card.clean||0)/total*100):0}%</strong><span>right first time</span></article>
   </div>
+  <p className="subtle">Every round counts towards the answer log. Only rounds that ask you to write
+   the French move mastery, so a meaning check is recorded here without filling a pip.</p>
   <p className="word-line">{known?'Known — out of rotation.':dueIn(card,now)}
    {card?.interval?<> <i>·</i> interval {card.interval}d</>:null}
    {card?.last?<> <i>·</i> last seen {ago(card.last)}</>:null}
