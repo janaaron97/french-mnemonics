@@ -273,16 +273,48 @@ export function check(typed,accepts){
  if(wanted.some(a=>bare(a)===bare(given)))return 'accent';
  return 'wrong';
 }
-const inRange=(w,picked)=>!picked?.length||picked.includes(w.level);
-export function queue({words,mode='discover',levels:picked,progress,now=Date.now(),size=10}){
+const rank=Object.fromEntries(levels.map((l,i)=>[l,i]));
+// Discover walks the whole corpus A1 → C1, and inside a level by frequency.
+// The level range is a filter for browsing and sorting, not for progression.
+export const ladder=(words,known={})=>words
+ .filter(w=>!known[w.id])
+ .sort((a,b)=>rank[a.level]-rank[b.level]||a.id-b.id);
+
+// Spread the second list evenly through the first rather than blocking it at
+// one end, so a round of new words has its reviews sprinkled through it.
+export function weave(main,extra){
+ if(!extra.length)return [...main];
+ if(!main.length)return [...extra];
+ const total=main.length+extra.length,step=total/extra.length,out=[];
+ let next=step/2-.5,m=0,e=0;
+ for(let i=0;i<total;i++){
+  if(e<extra.length&&(i>=Math.round(next)||m>=main.length)){out.push(extra[e++]);next+=step}
+  else out.push(main[m++]);
+ }
+ return out;
+}
+
+export function queue({words,mode='discover',progress,now=Date.now(),size=10}){
  const {cards={},lib={},known={},cursor=0}=progress||{};
- if(mode==='review')return words.filter(w=>!known[w.id]&&cards[w.id]&&cards[w.id].due<=now).sort((a,b)=>cards[a.id].due-cards[b.id].due).slice(0,size);
- if(mode==='library')return words.filter(w=>lib[w.id]&&!known[w.id]&&inRange(w,picked))
+ const due=words.filter(w=>!known[w.id]&&cards[w.id]&&cards[w.id].due<=now)
+  .sort((a,b)=>cards[a.id].due-cards[b.id].due);
+ if(mode==='review')return due.slice(0,size);
+ if(mode==='library')return words.filter(w=>lib[w.id]&&!known[w.id])
   .sort((a,b)=>(cards[a.id]?cards[a.id].due:now+1)-(cards[b.id]?cards[b.id].due:now+1)).slice(0,size);
- const open=words.filter(w=>!known[w.id]&&inRange(w,picked));
- if(!open.length)return [];
- const from=Math.max(0,open.findIndex(w=>w.id>cursor));
- return [...open.slice(from),...open.slice(0,from)].slice(0,size);
+
+ const order=ladder(words,known);
+ if(!order.length)return [];
+ // resume by rank, not by index, so a cursor word later marked known — and
+ // therefore absent from the ladder — does not send progress back to the start
+ const mark=cursor&&words.find(w=>w.id===cursor);
+ const after=mark?order.findIndex(w=>rank[w.level]>rank[mark.level]||(w.level===mark.level&&w.id>mark.id)):-1;
+ const from=mark?(after<0?0:after):0;
+ const unseen=[...order.slice(from),...order.slice(0,from)].filter(w=>!cards[w.id]);
+ // reviews take at most half a round, so progression never stalls behind them
+ const reviews=due.slice(0,Math.floor(size/2));
+ const fresh=unseen.slice(0,size-reviews.length);
+ const topUp=due.slice(reviews.length,reviews.length+(size-reviews.length-fresh.length));
+ return weave(fresh,[...reviews,...topUp]);
 }
 const plain=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
 const pad=n=>String(n).padStart(2,'0');

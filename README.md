@@ -60,11 +60,13 @@ Answering a card puts **every word of that sentence** into your library, not jus
 
 Three decks feed a round:
 
-- **Discover** walks the corpus in frequency order across the selected levels, resuming from where the last round left off. This is the way to progress through the language without first curating a library.
-- **My library** draws only from words you have collected, due ones first.
-- **Due reviews** draws whatever the spaced-repetition schedule has brought back around.
+- **Discover** is the progression. It walks the entire corpus **A1 → C1**, and inside a level in frequency order, resuming after the last new word it served. The level range does not narrow it — that range is a filter for sorting and browsing, not a cap on what you learn.
+- **My library** draws only from words you have collected, due ones first. This is where a curated list belongs.
+- **Due reviews** draws whatever the schedule has brought back around, oldest first.
 
-Every deck skips words marked known. You can mark a word known mid-round with **I know this**, which drops it from the current deck and the library, or from the round summary.
+Discover also **weaves in anything due for review**, spread through the round rather than blocked at one end, taking at most half the cards so progression never stalls behind a review backlog. A consequence worth knowing: words already in your schedule come back regardless of level, so if higher-level words got into the schedule earlier they will keep appearing until they are learned, and the mix settles back to the ladder as they clear.
+
+The resume point is stored as the id of the last **new** word served — a woven review never moves it — and is resolved by rank rather than by position, so a word you later mark known does not send progression back to the start. Every deck skips words marked known. You can mark a word known mid-round with **I know this**, which drops it from the current deck and the library, or from the round summary.
 
 **Sort** is one-gesture triage over the whole selected range. Swipe or drag right to add a word to your library, left to mark it known, down to skip labelling so it returns in a later session. Arrow keys do the same on a keyboard, `U` undoes the last card, and buttons do the same for anyone not using gestures.
 

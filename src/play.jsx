@@ -1,14 +1,14 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
 import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen} from 'lucide-react';
 import {queue,card,check,sentenceIds,applyGrade,addDay,mastery,streak as dayStreak,MASTERY,posOf} from './engine';
-import {LevelChips,Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
+import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor} from './generate.js';
 
 const ROUND=[7,12,20];
 const ACCENTS=['é','è','ê','à','â','î','ï','ô','û','ù','ç','œ'];
 const decks=[
- ['discover',Compass,'Discover','Walk the corpus from A1 to C1 in frequency order, picking up where you left off. Known words are skipped.'],
- ['library',Layers,'My library','Only the words you have collected — from sentences, swipes, or added by hand.'],
+ ['discover',Compass,'Discover','The whole corpus from A1 to C1 in order, resuming where you left off, with anything due for review woven in.'],
+ ['library',Layers,'My library','Only the words you have collected — from sentences, swipes, or added by hand. Due ones first.'],
  ['review',History,'Due reviews','Words whose spaced-repetition interval has come around again.']
 ];
 const points=streak=>100+Math.min(streak,8)*25;
@@ -32,13 +32,13 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  live.current=s;
 
  const counts=useMemo(()=>Object.fromEntries(decks.map(([m])=>
-  [m,queue({words,mode:m,levels:picked,progress:state,size:1e5}).length])),[words,state,picked]);
+  [m,queue({words,mode:m,progress:state,size:1e5}).length])),[words,state]);
 
  const start=(m=mode)=>{
-  const list=queue({words,mode:m,levels:picked,progress:state,size});
+  const list=queue({words,mode:m,progress:state,size});
   if(!list.length)return notice(m==='review'?'Nothing is due yet. Play a discover round to start your schedule.'
-   :m==='library'?'Your library is empty in these levels. Sort some words, or play a discover round to collect some.'
-   :'Every word in these levels is marked known. Widen the level range to keep going.');
+   :m==='library'?'Your library is empty. Sort some words, or play a discover round to collect some.'
+   :'Every word in the corpus is marked known.');
   clearTimeout(timer.current);setMode(m);setHint(false);setDraft('');setShown(0);setTeaching(false);
   setS({deck:list.map(card),i:0,score:0,streak:0,best:0,right:0,answered:0,collected:0,gain:0,missed:[],done:[],taughtCount:0,startedAt:Date.now(),result:null,typed:'',mode:m});
   setStage('play');
@@ -71,7 +71,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    const lib={...st.lib};
    for(const id of ids)if(!st.known[id]&&!lib[id])lib[id]=now;
    const {next}=applyGrade({...st,lib,days:addDay(st.days)},c.id,grades[outcome],now);
-   return {...next,xp:next.xp+gain,cursor:v.mode==='discover'?Math.max(next.cursor,c.id):next.cursor};
+   // only a new word moves the ladder on; a woven review is not progress
+   return {...next,xp:next.xp+gain,cursor:v.mode==='discover'&&!st.cards[c.id]?c.id:next.cursor};
   });
   const streak=ok?v.streak+1:0;
   setS({...v,result,outcome,typed,gain,taught:teaching,mastered:climbed,score:v.score+gain,streak,best:Math.max(v.best,streak),
@@ -122,7 +123,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   const c=v.deck[v.i],deck=v.deck.filter((_,i)=>i!==v.i);
   clearTimeout(timer.current);setHint(false);setDraft('');setShown(0);setTeaching(false);
   setState(st=>{const lib={...st.lib};delete lib[c.id];
-   return {...st,known:{...st.known,[c.id]:Date.now()},lib,cursor:Math.max(st.cursor,c.id)}});
+   return {...st,known:{...st.known,[c.id]:Date.now()},lib}});
   notice(`“${c.word.word}” filed under known words. It will not come up again.`);
   if(v.i>=deck.length)return finish({...v,deck});
   setS({...v,deck,result:null,typed:''});
@@ -138,7 +139,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  useEffect(()=>()=>clearTimeout(timer.current),[]);
  useVisualViewport();
 
- if(stage==='setup')return <Setup {...{counts,size,setSize,start,picked,setPicked,state}}/>;
+ if(stage==='setup')return <Setup {...{counts,size,setSize,start,state}}/>;
  if(stage==='done')return <Summary {...{s,setStage,start,setState,state,openWord,notice,explain,explaining}}/>;
 
  const c=s.deck[s.i],result=s.result,ok=result&&s.outcome!=='missed';
@@ -223,7 +224,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  </div>;
 }
 
-function Setup({counts,size,setSize,start,picked,setPicked,state}){
+function Setup({counts,size,setSize,start,state}){
  return <>
   <div className="play-hero">
    <div>
@@ -232,11 +233,10 @@ function Setup({counts,size,setSize,start,picked,setPicked,state}){
    </div>
    <div className="xp-badge"><Zap size={18}/><Counter value={state.xp}/><span>XP · {state.rounds} rounds</span></div>
   </div>
-  <div className="setup-row"><span className="setup-label">LEVEL RANGE</span><LevelChips picked={picked} onChange={setPicked}/></div>
   <div className="deck-grid">{decks.map(([m,Icon,title,blurb])=>
    <button key={m} className="deck" disabled={!counts[m]} onClick={()=>start(m)}>
     <Icon size={20}/><strong>{title}</strong><p>{blurb}</p>
-    <span className="deck-count">{counts[m].toLocaleString()} ready{m!=='review'&&<> in {picked.join(', ')}</>} <ArrowRight size={15}/></span>
+    <span className="deck-count">{counts[m].toLocaleString()} ready <ArrowRight size={15}/></span>
    </button>)}</div>
   <div className="setup-row"><span className="setup-label">ROUND LENGTH</span>
    <div className="level-chips compact">{ROUND.map(n=><button key={n} className={size===n?'on':''} onClick={()=>setSize(n)}>{n} cards</button>)}</div>

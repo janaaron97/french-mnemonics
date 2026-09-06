@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,queue,migrate,validate,levels,applyGrade,mastery,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -62,20 +62,65 @@ test('typed answers tolerate case and spacing, not missing accents',()=>{
  assert.equal(check('le fardeau',['fardeau','le fardeau']),'exact');
  assert.equal(check('etre',['être']),'accent');
 });
-test('sessions skip known words and honour the level range',()=>{
- const known={[words[0].id]:1,[words[1].id]:1};
- const discover=queue({words,mode:'discover',levels:['A1'],progress:{known},size:5});
- assert.equal(discover.length,5);
- assert.ok(discover.every(w=>w.level==='A1'&&!known[w.id]));
- const resumed=queue({words,mode:'discover',levels:['A1'],progress:{known,cursor:discover[4].id},size:3});
- assert.ok(resumed[0].id>discover[4].id);
- const lib={[words[9].id]:1,[words[0].id]:1};
- const mine=queue({words,mode:'library',levels:levels,progress:{lib,known},size:9});
- assert.deepEqual(mine.map(w=>w.id),[words[9].id]);
+test('discover walks A1 to C1 in order, skipping known words',()=>{
+ const order=ladder(words,{});
+ assert.equal(order.length,words.length);
+ for(let i=1;i<order.length;i++){
+  const a=levels.indexOf(order[i-1].level),b=levels.indexOf(order[i].level);
+  assert.ok(a<=b,'ladder left level order at '+i);
+  if(a===b)assert.ok(order[i-1].id<order[i].id,'ladder left frequency order at '+i);
+ }
+ assert.equal(order[0].level,'A1');
+ assert.equal(order[order.length-1].level,'C1');
+ const known={[words[0].id]:1};
+ assert.ok(!ladder(words,known).some(w=>w.id===words[0].id));
+});
+test('a discover round resumes after the last new word, wrapping when spent',()=>{
+ const order=ladder(words,{});
+ const first=queue({words,mode:'discover',progress:{},size:5});
+ assert.deepEqual(first.map(w=>w.id),order.slice(0,5).map(w=>w.id));
+ const next=queue({words,mode:'discover',progress:{cursor:first[4].id},size:5});
+ assert.deepEqual(next.map(w=>w.id),order.slice(5,10).map(w=>w.id));
+ const unknownCursor=queue({words,mode:'discover',progress:{cursor:-1},size:3});
+ assert.deepEqual(unknownCursor.map(w=>w.id),order.slice(0,3).map(w=>w.id));
+ assert.deepEqual(queue({words,mode:'discover',progress:{known:Object.fromEntries(words.map(w=>[w.id,1]))}}),[]);
+});
+test('due reviews weave into discover without crowding out progress',()=>{
  const now=1e12;
+ const late=words.slice(3000,3040);
+ const cards=Object.fromEntries(late.map((w,i)=>[w.id,{due:now-1000-i,interval:2,reviews:1}]));
+ const round=queue({words,mode:'discover',progress:{cards,cursor:0},now,size:10});
+ assert.equal(round.length,10);
+ const reviews=round.filter(w=>cards[w.id]).length;
+ assert.equal(reviews,5,'reviews should take at most half the round');
+ assert.ok(round.some(w=>!cards[w.id]),'a round must still make progress');
+ assert.ok(round.every(w=>!cards[w.id]||cards[w.id].due<=now),'only due cards weave in');
+ // a word already scheduled but not yet due stays out of the round entirely
+ const later={[words[4000].id]:{due:now+1e9,interval:9,reviews:1}};
+ assert.ok(!queue({words,mode:'discover',progress:{cards:later,cursor:0},now,size:10}).some(w=>w.id===words[4000].id));
+ // with nothing due, the round is all progression
+ assert.equal(queue({words,mode:'discover',progress:{cursor:0},now,size:6}).length,6);
+});
+test('weave spreads the second list through the first',()=>{
+ assert.deepEqual(weave([1,2,3,4,5,6],['a']),[1,2,3,'a',4,5,6]);
+ assert.deepEqual(weave([1,2,3,4,5,6],['a','b']),[1,2,'a',3,4,5,'b',6]);
+ assert.deepEqual(weave([],['a','b']),['a','b']);
+ assert.deepEqual(weave([1,2],[]),[1,2]);
+ for(const [m,e] of [[7,3],[1,9],[9,1],[0,0],[4,4]]){
+  const out=weave(Array.from({length:m},(_,i)=>i),Array.from({length:e},(_,i)=>'x'+i));
+  assert.equal(out.length,m+e,`weave lost items at ${m}+${e}`);
+  assert.equal(new Set(out).size,m+e,`weave duplicated items at ${m}+${e}`);
+ }
+});
+test('library and review decks ignore the level range',()=>{
+ const now=1e12;
+ const lib={[words[0].id]:1,[words[5400].id]:1};
+ const mine=queue({words,mode:'library',progress:{lib,known:{}},now,size:9});
+ assert.deepEqual(mine.map(w=>w.id).sort((a,b)=>a-b),[words[0].id,words[5400].id]);
+ const known={[words[0].id]:1};
+ assert.deepEqual(queue({words,mode:'library',progress:{lib,known},now,size:9}).map(w=>w.id),[words[5400].id]);
  const cards={[words[4].id]:{due:now-1,interval:1,reviews:1},[words[5].id]:{due:now+1e9,interval:9,reviews:1}};
- assert.deepEqual(queue({words,mode:'review',progress:{cards,known},now,size:9}).map(w=>w.id),[words[4].id]);
- assert.deepEqual(queue({words,mode:'discover',levels:['A1'],progress:{known:Object.fromEntries(words.map(w=>[w.id,1]))}}),[]);
+ assert.deepEqual(queue({words,mode:'review',progress:{cards,known:{}},now,size:9}).map(w=>w.id),[words[4].id]);
 });
 test('older backups migrate, malformed ones are refused',()=>{
  const old={version:1,cards:{'1':{due:5,interval:1,reviews:1}},notes:{'2':'mine'}};
