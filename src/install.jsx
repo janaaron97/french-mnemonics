@@ -1,5 +1,5 @@
 import React,{useState,useEffect} from 'react';
-import {Download,Share,Check,X,Plus,MoreVertical,RefreshCw} from 'lucide-react';
+import {Download,Share,Check,X,Plus,MoreVertical,RefreshCw,ClipboardCopy} from 'lucide-react';
 
 // Chromium fires beforeinstallprompt and hands you a prompt to replay later, but
 // it fires on its own schedule — often before this bundle has run, since the app
@@ -43,18 +43,23 @@ export function useInstall(){
  return {offer,install,installed,ios:isIOS(),android:isAndroid(),chromium:isChromium()};
 }
 
-// What to tell someone with no prompt in hand. Chrome dropped the automatic
-// install banner years ago, so on Android the menu item is the honest answer.
+// What to tell someone with no prompt in hand. The wording matters on Android:
+// Chrome's menu offers "Add to Home screen" for any page at all, and for a page
+// it does not consider installable that makes a bookmark which still opens in a
+// tab with the address bar showing. "Install app" is the one that means it.
 function Manual({ios,android,chromium}){
  if(ios)return <ol className="install-steps">
   <li>Tap <Share size={14}/> <b>Share</b> in the Safari toolbar.</li>
   <li>Scroll down and tap <Plus size={14}/> <b>Add to Home Screen</b>.</li>
   <li>Tap <b>Add</b>.</li>
  </ol>;
- if(android&&chromium)return <ol className="install-steps">
+ if(android&&chromium)return <><ol className="install-steps">
   <li>Tap <MoreVertical size={14}/> in the Chrome toolbar.</li>
-  <li>Tap <b>Add to Home screen</b>, then <b>Install</b>.</li>
- </ol>;
+  <li>Look for <b>Install app</b> — that is the real one.</li>
+ </ol>
+ <p className="install-warn">If the menu only offers <b>Add to Home screen</b>, Chrome has not accepted this
+  page as an app yet, and that option just makes a bookmark: it opens in a tab with the address bar still
+  showing. Run the check below — it names what is missing.</p></>;
  if(chromium)return <ol className="install-steps">
   <li>Click the <Download size={14}/> install icon at the right of the address bar,</li>
   <li>or open the <MoreVertical size={14}/> menu and choose <b>Cast, save and share → Install page as app</b>.</li>
@@ -63,7 +68,13 @@ function Manual({ios,android,chromium}){
 }
 
 export function InstallPanel({offer,install,installed,ios,android,chromium}){
- const [report,setReport]=useState(null);
+ const [report,setReport]=useState(null),[copied,setCopied]=useState(false);
+ const run=()=>installCheck().then(setReport);
+ useEffect(()=>{run()},[]);   // it answers the only question worth asking here
+ const copy=()=>{
+  const text=Object.entries(report||{}).map(([k,v])=>k+': '+v).join('\n');
+  navigator.clipboard?.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1600)}).catch(()=>{});
+ };
  const manual=<Manual ios={ios} android={android} chromium={chromium}/>;
  return <section className="account">
   <h3>Install on this device</h3>
@@ -77,55 +88,107 @@ export function InstallPanel({offer,install,installed,ios,android,chromium}){
       ?'Safari only offers this from Safari itself — not from Chrome or an in-app browser. Once added it opens full screen and works offline, and audio behaves better than it does in a tab.'
       :'Chrome stopped showing an automatic install banner years ago, so the menu item above is the reliable route even when this page offers no button. Installed, it opens in its own window and keeps working without a connection — only syncing and AI writing need one.'}</p>
     </>}
+  {report&&<p className={'install-verdict '+(String(report.verdict).startsWith('BLOCKED')?'bad':'ok')}>{report.verdict}</p>}
   <div className="account-row">
-   <button className="ghost-btn" onClick={()=>installCheck().then(setReport)}><RefreshCw size={15}/> Install check</button>
+   <button className="ghost-btn" onClick={run}><RefreshCw size={15}/> Re-run check</button>
+   <button className="ghost-btn" onClick={copy} disabled={!report}>
+    {copied?<Check size={15}/>:<ClipboardCopy size={15}/>} {copied?'Copied':'Copy report'}</button>
   </div>
-  {report&&<dl className="report">{Object.entries(report).map(([k,v])=>
+  {report&&<dl className="report">{Object.entries(report).filter(([k])=>k!=='verdict').map(([k,v])=>
    <React.Fragment key={k}><dt>{k}</dt><dd>{String(v)}</dd></React.Fragment>)}</dl>}
  </section>;
 }
 
-// Installability fails silently, so make the state readable rather than guessed.
+// Installability fails silently: Chrome simply declines, and the browser menu
+// then offers "Add to Home screen", which makes a plain bookmark that opens in
+// a tab. So check every requirement by hand and say which one is missing.
 export async function installCheck(){
- const out={
-  displayMode:standalone()?'standalone (installed)':'browser tab',
-  secureContext:typeof isSecureContext!=='undefined'?String(isSecureContext):'unknown',
-  origin:location.origin,
-  engine:isChromium()?'chromium':isIOS()?'webkit':'other',
-  promptSeen:(window.__echoSeen||0)+' time(s)',
-  promptInHand:window.__echoInstall?'yes':'no'
+ const out={};
+ const verdict=[];
+ out.displayMode=standalone()?'standalone (installed)':'browser tab';
+ out.promptSeen=(window.__echoSeen||0)+' time(s)';
+ out.promptInHand=window.__echoInstall?'yes':'no';
+ out.secureContext=typeof isSecureContext!=='undefined'?String(isSecureContext):'unknown';
+ if(typeof isSecureContext!=='undefined'&&!isSecureContext)verdict.push('not a secure context');
+ out.origin=location.origin;
+ out.engine=isChromium()?'chromium':isIOS()?'webkit':'other';
+
+ // A file caught by the SPA rewrite comes back as the app's HTML, which is the
+ // classic silent break: the manifest will not parse and the worker will not
+ // register with an HTML content type.
+ const probe=async path=>{
+  try{
+   // ?__probe bypasses this app's own service worker, which is cache-first and
+   // would otherwise answer with a stored copy instead of the server's.
+   const u=new URL(path,location.href);
+   u.searchParams.set('__probe',Date.now());
+   const r=await fetch(u.href,{cache:'no-store'});
+   const type=(r.headers.get('content-type')||'').split(';')[0];
+   const head=(await r.text()).slice(0,40).replace(/\s+/g,' ');
+   return {ok:r.ok,status:r.status,type,head,html:/^\s*<(!doctype|html)/i.test(head)};
+  }catch(err){return {ok:false,status:0,type:'',head:String(err&&err.message),html:false}}
  };
- try{
-  const link=document.querySelector('link[rel=manifest]');
-  out.manifestLink=link?link.getAttribute('href'):'MISSING';
-  if(link){
-   const res=await fetch(link.href,{cache:'no-store'});
-   out.manifestFetch=res.status+' '+(res.headers.get('content-type')||'');
-   const m=await res.json();
-   out.manifestName=m.name;
-   out.manifestDisplay=m.display+' · start '+m.start_url;
-   const icons=await Promise.all((m.icons||[]).map(async i=>{
-    try{const r=await fetch(new URL(i.src,location.origin),{method:'HEAD',cache:'no-store'});
-     return `${i.sizes}${i.purpose==='maskable'?' maskable':''}:${r.status}`}
-    catch{return `${i.sizes}:FAILED`}
-   }));
-   out.icons=icons.join('  ');
-   const shots=m.screenshots||[];
-   out.screenshots=shots.length?`${shots.length} (${shots.map(x=>x.sizes).join(' ')})`:'none — plain dialog, not the rich one';
-   out.richDialog=(shots.length&&m.description)?'eligible':'no: needs screenshots + description';
+
+ const mf=document.querySelector('link[rel=manifest]');
+ out.manifestLink=mf?mf.getAttribute('href'):'MISSING';
+ if(!mf)verdict.push('no manifest link in the page');
+ else{
+  const p=await probe(mf.href);
+  out.manifestServed=`${p.status} ${p.type}`;
+  if(!p.ok)verdict.push('manifest did not load ('+p.status+')');
+  else if(p.html)verdict.push('manifest came back as HTML — a rewrite is swallowing it');
+  else{
+   try{
+    const mu=new URL(mf.href,location.href);mu.searchParams.set('__probe',Date.now());
+    const m=await(await fetch(mu.href,{cache:'no-store'})).json();
+    out.manifestName=m.name||'(none)';
+    out.manifestDisplay=`${m.display} · start ${m.start_url} · scope ${m.scope}`;
+    if(!m.name&&!m.short_name)verdict.push('manifest has no name');
+    if(!['standalone','fullscreen','minimal-ui'].includes(m.display))verdict.push('display is '+m.display);
+    if(m.prefer_related_applications===true)verdict.push('prefer_related_applications is true');
+    const sizes=(m.icons||[]).flatMap(i=>String(i.sizes||'').split(' '));
+    const px=sizes.map(x=>parseInt(x,10)).filter(Boolean);
+    if(!px.some(n=>n>=192))verdict.push('no icon of 192px or more');
+    if(!px.some(n=>n>=512))verdict.push('no icon of 512px or more');
+    const icons=await Promise.all((m.icons||[]).map(async i=>{
+     const r=await probe(new URL(i.src,location.origin).href);
+     if(!r.ok||r.html)verdict.push('icon '+i.src+' did not load');
+     return `${i.sizes}:${r.status}`;
+    }));
+    out.icons=icons.join('  ')||'NONE';
+    const shots=m.screenshots||[];
+    out.screenshots=shots.length?shots.length+' × '+shots[0].sizes:'none';
+    out.richDialog=(shots.length&&m.description)?'eligible':'plain dialog only';
+   }catch(err){verdict.push('manifest is not valid JSON');out.manifestParse=String(err&&err.message)}
   }
- }catch(err){out.manifestError=err&&err.message}
+ }
+
+ out.swRegister=window.__echoSW||'never attempted';
+ if(String(out.swRegister).startsWith('FAILED'))verdict.push('service worker did not register');
+ const p=await probe('/sw.js');
+ out.swServed=`${p.status} ${p.type}`;
+ if(p.html)verdict.push('/sw.js came back as HTML — a rewrite is swallowing it');
+ else if(!p.ok)verdict.push('/sw.js did not load ('+p.status+')');
  try{
-  const regs=await navigator.serviceWorker?.getRegistrations?.()||[];
-  out.serviceWorker=regs.length?regs.map(r=>r.scope).join(' '):'none registered';
-  out.swControlling=navigator.serviceWorker?.controller?'yes':'no (reload once)';
- }catch{out.serviceWorker='unavailable'}
+  const regs=await navigator.serviceWorker.getRegistrations();
+  out.swState=regs.length?regs.map(r=>(r.active?'active':r.installing?'installing':r.waiting?'waiting':'idle')+' @ '+r.scope).join(' | '):'none';
+  if(!regs.length)verdict.push('no service worker registered');
+  else if(!regs.some(r=>r.active))verdict.push('service worker never activated');
+  out.swControls=navigator.serviceWorker.controller?'yes':'no — reload once';
+ }catch(err){out.swState='unavailable: '+(err&&err.message);verdict.push('service workers unavailable')}
+
  try{
   if(navigator.getInstalledRelatedApps){
    const apps=await navigator.getInstalledRelatedApps();
-   out.alreadyInstalled=apps.length?apps.map(a=>a.id||a.url).join(' '):'not reported';
+   if(apps.length)verdict.push('already installed — Chrome hides the offer');
+   out.alreadyInstalled=apps.length?apps.map(a=>a.id||a.url).join(' '):'no';
   }
  }catch{}
+
+ out.verdict=standalone()?'running as an installed app'
+  :verdict.length?'BLOCKED: '+verdict.join('; ')
+  :window.__echoInstall?'ready — Chrome has offered an install'
+  :'every requirement is met, but Chrome has not offered yet (it gates on engagement — use the app a while, then reload)';
  return out;
 }
 

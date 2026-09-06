@@ -333,4 +333,8 @@ createRoot(document.getElementById('root')).render(<Root/>);
 // fight hot reload. The worker keeps navigation network-first, so a deploy still
 // lands as soon as the device is online.
 if(import.meta.env.PROD&&'serviceWorker' in navigator)
- window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js')
+  .then(reg=>{window.__echoSW='registered '+reg.scope})
+  .catch(err=>{window.__echoSW='FAILED: '+(err&&err.message)}));
+else if(!('serviceWorker' in navigator))window.__echoSW='unsupported by this browser';
+else window.__echoSW='not registered (dev build)';

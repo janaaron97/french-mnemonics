@@ -815,3 +815,9 @@ footer{color:var(--dim)}
  .install-nudge{gap:10px;padding:11px}
  .install-nudge .go.slim{padding:10px 12px}
 }
+.install-verdict{font-size:13px;line-height:1.6;margin:0;padding:11px 13px;border-radius:9px}
+.install-verdict.ok{color:var(--green);background:var(--green-soft)}
+.install-verdict.bad{color:var(--red);background:var(--red-soft)}
+.install-warn{font-size:12.5px;line-height:1.65;color:var(--muted);border-left:2px solid var(--gold);
+ padding-left:12px;margin:0}
+.report dd{overflow-wrap:anywhere}
