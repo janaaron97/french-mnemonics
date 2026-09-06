@@ -42,11 +42,48 @@ function audio(){
   return ctx;
  }catch{return null}
 }
+// iOS mutes the Web Audio and speech "ambient" session when the ringer switch
+// is off. A looping HTMLMediaElement moves the page into the playback session,
+// which the switch does not silence. It has to carry a non-zero waveform —
+// a genuinely silent or muted element stays ambient and changes nothing.
+const LOUD='echo-loud';
+export const isLoud=()=>{try{return localStorage.getItem(LOUD)!=='0'}catch{return true}};
+export function setLoud(on){
+ try{localStorage.setItem(LOUD,on?'1':'0')}catch{}
+ if(on)keepAwake();else stopAwake();
+}
+let keeper,keeperUrl;
+function hum(){
+ const rate=8000,len=rate,buf=new ArrayBuffer(44+len*2),view=new DataView(buf);
+ const tag=(at,t)=>{for(let i=0;i<t.length;i++)view.setUint8(at+i,t.charCodeAt(i))};
+ tag(0,'RIFF');view.setUint32(4,36+len*2,true);tag(8,'WAVEfmt ');
+ view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+ view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+ tag(36,'data');view.setUint32(40,len*2,true);
+ for(let i=0;i<len;i++)view.setInt16(44+i*2,i%2?1:-1,true);
+ return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+}
+export function keepAwake(){
+ if(keeper||!isLoud())return;
+ try{
+  keeperUrl=keeperUrl||hum();
+  keeper=new Audio(keeperUrl);
+  keeper.loop=true;keeper.volume=.02;
+  keeper.setAttribute('playsinline','');
+  keeper.play().catch(()=>{keeper=null});
+ }catch{keeper=null}
+}
+export function stopAwake(){
+ try{keeper?.pause()}catch{}
+ keeper=null;
+}
+
 export function unlockSound(){
  // Safari 16.4+ only lets audio through the hardware silent switch when the
  // page declares a playback audio session. Without this, WebAudio and speech
  // are both muted on a phone with the ringer off, with no error anywhere.
  try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback'}catch{}
+ keepAwake();
  const c=audio();
  if(!c||unlocked)return;
  try{
@@ -95,6 +132,7 @@ export function soundReport(){
   audioContext:ctx?ctx.state:'not created',
   unlocked,
   audioSession:(typeof navigator!=='undefined'&&navigator.audioSession)?(navigator.audioSession.type||'default'):'unsupported',
+  silentSwitchOverride:isLoud()?(keeper&&!keeper.paused?'on and running':'on, not started'):'off',
   speech:synth?'available':'missing',
   voices:list.length,
   frenchVoices:fr.length,
