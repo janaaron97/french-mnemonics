@@ -1,6 +1,6 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
-import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,CornerDownLeft} from 'lucide-react';
-import {queue,card,check,sentenceIds,schedule,posOf} from './engine';
+import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,CornerDownLeft,LightbulbOff,Lightbulb} from 'lucide-react';
+import {queue,card,check,sentenceIds,applyGrade,mastery,MASTERY,posOf} from './engine';
 import {LevelChips,Cues,speak,tone,buzz,useKeys,Counter} from './ui';
 
 const ROUND=[7,12,20];
@@ -11,11 +11,13 @@ const decks=[
  ['review',History,'Due reviews','Words whose spaced-repetition interval has come around again.']
 ];
 const points=streak=>100+Math.min(streak,8)*25;
-const grades={exact:'good',accent:'hard',wrong:'again'};
+const grades={clean:'good',close:'hard',missed:'again'};
+// Mastery only advances on a word you spelled exactly, with no letters uncovered.
+const judge=(result,assisted)=>result==='wrong'?'missed':result==='accent'||assisted?'close':'clean';
 
 export default function Play({words,state,setState,picked,setPicked,notice,openWord,launch,onLaunched}){
  const [stage,setStage]=useState('setup'),[size,setSize]=useState(12),[mode,setMode]=useState('discover');
- const [s,setS]=useState(null),[hint,setHint]=useState(false),[draft,setDraft]=useState('');
+ const [s,setS]=useState(null),[hint,setHint]=useState(false),[draft,setDraft]=useState(''),[shown,setShown]=useState(0);
  const timer=useRef(0),live=useRef(null),field=useRef(null);
  live.current=s;
 
@@ -27,7 +29,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   if(!list.length)return notice(m==='review'?'Nothing is due yet. Play a discover round to start your schedule.'
    :m==='library'?'Your library is empty in these levels. Sort some words, or play a discover round to collect some.'
    :'Every word in these levels is marked known. Widen the level range to keep going.');
-  clearTimeout(timer.current);setMode(m);setHint(false);setDraft('');
+  clearTimeout(timer.current);setMode(m);setHint(false);setDraft('');setShown(0);
   setS({deck:list.map(card),i:0,score:0,streak:0,best:0,right:0,answered:0,collected:0,gain:0,missed:[],result:null,typed:'',mode:m});
   setStage('play');
  };
@@ -39,7 +41,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   setStage('done');
  };
  const next=()=>{
-  clearTimeout(timer.current);setHint(false);setDraft('');
+  clearTimeout(timer.current);setHint(false);setDraft('');setShown(0);
   const v=live.current;
   if(!v)return;
   if(v.i+1>=v.deck.length)return finish(v);
@@ -49,24 +51,26 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  const settle=(result,typed)=>{
   const v=live.current;
   if(!v||v.result)return;
-  const c=v.deck[v.i],ok=result!=='wrong',now=Date.now();
-  const gain=result==='exact'?points(v.streak):result==='accent'?Math.round(points(v.streak)/2):0;
+  const c=v.deck[v.i],now=Date.now();
+  const outcome=judge(result,shown>0),ok=outcome!=='missed';
+  const gain=outcome==='clean'?points(v.streak):outcome==='close'?Math.round(points(v.streak)/2):0;
+  const climbed=outcome==='clean'&&!state.known[c.id]&&(state.cards[c.id]?.clean||0)+1>=MASTERY;
   const ids=[...new Set([c.id,...sentenceIds(c.word.example,words)])];
   const fresh=ids.filter(id=>!state.lib[id]&&!state.known[id]).length;
   setState(st=>{
    const lib={...st.lib};
    for(const id of ids)if(!st.known[id]&&!lib[id])lib[id]=now;
-   return {...st,lib,cards:{...st.cards,[c.id]:schedule(st.cards[c.id],grades[result],now)},xp:st.xp+gain,
-    cursor:v.mode==='discover'?Math.max(st.cursor,c.id):st.cursor};
+   const {next}=applyGrade({...st,lib},c.id,grades[outcome],now);
+   return {...next,xp:next.xp+gain,cursor:v.mode==='discover'?Math.max(next.cursor,c.id):next.cursor};
   });
   const streak=ok?v.streak+1:0;
-  setS({...v,result,typed,gain,score:v.score+gain,streak,best:Math.max(v.best,streak),answered:v.answered+1,
-   right:v.right+(result==='exact'?1:0),collected:v.collected+fresh,missed:ok?v.missed:[...v.missed,c.word]});
-  tone(result==='exact'?[[660,0,.09],[880,.08,.14]]:result==='accent'?[[620,0,.1],[700,.09,.12]]:[[190,0,.18,'sawtooth']],state.sound);
+  setS({...v,result,outcome,typed,gain,mastered:climbed,score:v.score+gain,streak,best:Math.max(v.best,streak),
+   answered:v.answered+1,right:v.right+(outcome==='clean'?1:0),collected:v.collected+fresh,
+   missed:ok?v.missed:[...v.missed,c.word]});
+  tone(outcome==='clean'?[[660,0,.09],[880,.08,.14]]:outcome==='close'?[[620,0,.1],[700,.09,.12]]:[[190,0,.18,'sawtooth']],state.sound);
   buzz(ok?18:[28,40,28]);
-  if(result==='exact')timer.current=setTimeout(next,950);
+  if(outcome==='clean')timer.current=setTimeout(next,climbed?1600:950);
  };
-
  const submit=e=>{
   e?.preventDefault?.();
   const v=live.current;
@@ -89,7 +93,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   const v=live.current;
   if(!v)return;
   const c=v.deck[v.i],deck=v.deck.filter((_,i)=>i!==v.i);
-  clearTimeout(timer.current);setHint(false);setDraft('');
+  clearTimeout(timer.current);setHint(false);setDraft('');setShown(0);
   setState(st=>{const lib={...st.lib};delete lib[c.id];
    return {...st,known:{...st.known,[c.id]:Date.now()},lib,cursor:Math.max(st.cursor,c.id)}});
   notice(`“${c.word.word}” filed under known words. It will not come up again.`);
@@ -109,8 +113,10 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  if(stage==='setup')return <Setup {...{counts,size,setSize,start,picked,setPicked,state}}/>;
  if(stage==='done')return <Summary {...{s,setStage,start,setState,openWord,notice}}/>;
 
- const c=s.deck[s.i],result=s.result,ok=result&&result!=='wrong';
+ const c=s.deck[s.i],result=s.result,ok=result&&s.outcome!=='missed';
+ const cleanSoFar=mastery(state.cards[c.id]);
  const filled=result?c.answer:draft;
+ const tone3=result?(s.outcome==='clean'?'right':s.outcome==='close'?'close':'wrong'):'gap';
  return <div className={'arena'+(result?ok?' win':' fail':'')}>
   <div className="arena-hud">
    <button className="hud-quit" onClick={quit} aria-label="Leave this round"><X size={18}/></button>
@@ -126,13 +132,13 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
     <button className="ghost" onClick={markKnown}><Check size={14}/> I know this</button></div>
 
    {c.kind==='cloze'
-    ? <p className="cloze" lang="fr">{c.before}<b className={result?ok?'right':'wrong':'gap'}>{filled}</b>{c.after}</p>
+    ? <p className="cloze" lang="fr">{c.before}<b className={tone3}>{filled}</b>{c.after}</p>
     : <div className="recall-prompt"><span className="arena-eyebrow">WRITE THE FRENCH FOR</span><p className="cloze">“{c.word.meaning}”</p></div>}
 
    <p className="arena-gloss">{c.kind==='cloze'?c.word.translation:result?c.word.example:'Spell it from memory. Accents count.'}</p>
 
    <form className="typing" onSubmit={submit}>
-    <input ref={field} className={'answer-field'+(result?ok?' right':' wrong':'')} value={result?c.answer:draft}
+    <input ref={field} className={'answer-field'+(result?' '+tone3:'')} value={result?c.answer:draft}
      onChange={e=>setDraft(e.target.value)} readOnly={!!result} autoFocus lang="fr" enterKeyHint="go"
      autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
      placeholder={'·'.repeat(c.length)} aria-label={c.kind==='cloze'?'Type the missing word':'Type the French word'}/>
@@ -141,25 +147,36 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
 
    {!result&&<>
     <div className="accents">{ACCENTS.map(ch=><button key={ch} type="button" onClick={()=>accent(ch)}>{ch}</button>)}</div>
+    {shown>0&&<div className="letters" aria-label={'First '+shown+' letters'}>
+     {[...c.answer].map((ch,i)=><span key={i} className={i<shown?'on':''}>{i<shown?ch:'·'}</span>)}</div>}
     <div className="assists">
+     <span className="mastery-inline" title={cleanSoFar+' clean answers out of '+MASTERY}>
+      <Sparkles size={13}/> mastery {cleanSoFar}/{MASTERY}</span>
      <span>{c.length} letters</span>
      {!hint&&<button className="hint-btn" onClick={()=>setHint(true)}><Ear size={15}/> Sound hint</button>}
+     <button className="hint-btn" onClick={()=>setShown(n=>n+1)} disabled={shown>=c.length-1}>
+      {shown?<Lightbulb size={15}/>:<LightbulbOff size={15}/>} {shown?'One more letter':'Reveal a letter'}</button>
      <button className="hint-btn" onClick={giveUp}>Reveal the answer</button>
     </div>
+    {!!shown&&<p className="assist-note">Uncovered letters make this one count as close, not clean — mastery only moves on an unaided answer.</p>}
    </>}
 
    {hint&&!result&&<div className="arena-hint"><Cues ipa={c.word.ipa} size="sm"/><small>/{c.word.ipa}/ — read the cast left to right.</small></div>}
 
    {result&&<div className="verdict">
     <div className="verdict-head">
-     <strong>{result==='exact'?`+${s.gain}`:result==='accent'?`Almost · +${s.gain}`:'Not this time'}</strong>
+     <strong>{s.outcome==='clean'?`+${s.gain}`:s.outcome==='close'?`Almost · +${s.gain}`:'Not this time'}</strong>
      <button className="say" onClick={()=>speak(c.word.example,notice)} aria-label="Hear the sentence"><Volume2 size={17}/></button>
      <span lang="fr">{c.word.article||c.word.word} <i>/{c.word.ipa}/</i> — {c.word.meaning}</span>
     </div>
     {result==='accent'&&<span className="slip">You wrote “{s.typed.trim()}” — the accents are part of the spelling.</span>}
+    {result==='exact'&&s.outcome==='close'&&<span className="slip">Right, but with letters uncovered — mastery holds at {cleanSoFar}/{MASTERY}.</span>}
     {result==='wrong'&&!!s.typed.trim()&&<span className="slip">You wrote “{s.typed.trim()}”.</span>}
+    {s.mastered
+     ?<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>
+     :s.outcome==='clean'&&<span className="collected"><Sparkles size={13}/> mastery {cleanSoFar}/{MASTERY}</span>}
     {!!s.collected&&<span className="collected"><Sparkles size={13}/> {s.collected} sentence word{s.collected===1?'':'s'} saved to your library this round</span>}
-    <button className={result==='exact'?'ghost-btn':'primary'} onClick={next}>Keep going <ArrowRight size={17}/></button>
+    <button className={s.outcome==='clean'?'ghost-btn':'primary'} onClick={next}>Keep going <ArrowRight size={17}/></button>
    </div>}
   </div>
  </div>;

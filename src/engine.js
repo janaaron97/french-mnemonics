@@ -6,7 +6,39 @@ export const sounds=[
 export const chunks=[{ipa:'sjɔ̃',name:'Transformation machine',emoji:'⚙️',type:'chunk',hint:'A sound shortcut common in -tion words. It is not always a morpheme.'},{ipa:'mɑ̃',name:'Magic cloak',emoji:'🧥',type:'chunk',hint:'Common in -ment; often creates an adverb, but not always.'},{ipa:'aʒ',name:'Workshop',emoji:'🛠️',type:'chunk',hint:'Common in -age, often an action or result.'},{ipa:'ite',name:'Quality inspector',emoji:'🔎',type:'chunk',hint:'Common in -ité, often an abstract quality.'}];
 export function tokenize(ipa,compact=true){const keys=[...(compact?chunks:[]),...sounds].sort((a,b)=>b.ipa.length-a.ipa.length);let rest=ipa.normalize('NFC').replace(/[ʼˈˌ.\s/()‿]/g,'');let out=[];while(rest){const key=keys.find(s=>rest.startsWith(s.ipa));if(key){out.push(key);rest=rest.slice(key.ipa.length)}else{out.push({ipa:[...rest][0],name:'Unmapped sound',emoji:'◌',type:'unknown'});rest=rest.slice([...rest][0].length)}}return out}
 export function scene(w){const cues=tokenize(w.ipa);return `Picture ${cues.map(c=>c.type==='vowel'||c.type==='nasal'?`a scene at the ${c.name.toLowerCase()}`:c.name.toLowerCase()).join(' → ')}. In that exact order, make them act out “${w.meaning}”. ${w.article?.startsWith('la ')?'Add a silver ribbon to mark feminine gender.':w.article?.startsWith('le ')?'Add a golden key to mark masculine gender.':'If the article hides gender, check a dictionary before adding a gender prop.'}`}
-export function schedule(previous,grade,now=Date.now()){const old=previous?.interval||0;const interval=grade==='again'?0:grade==='hard'?Math.max(1,Math.round(old*1.2)):grade==='good'?Math.max(1,Math.round(old*2.5)):Math.max(4,Math.round(old*3.5));return {interval,due:now+(grade==='again'?60000:interval*86400000),reviews:(previous?.reviews||0)+1,last:now};}
+export const MASTERY=10;
+const tally={again:'missed',hard:'close',good:'clean',easy:'clean'};
+export function schedule(previous,grade,now=Date.now()){
+ const old=previous?.interval||0;
+ const interval=grade==='again'?0:grade==='hard'?Math.max(1,Math.round(old*1.2)):grade==='good'?Math.max(1,Math.round(old*2.5)):Math.max(4,Math.round(old*3.5));
+ const hit=tally[grade];
+ return {interval,due:now+(grade==='again'?60000:interval*86400000),reviews:(previous?.reviews||0)+1,last:now,
+  clean:(previous?.clean||0)+(hit==='clean'?1:0),
+  close:(previous?.close||0)+(hit==='close'?1:0),
+  missed:(previous?.missed||0)+(hit==='missed'?1:0)};
+}
+export const mastery=card=>Math.min(MASTERY,card?.clean||0);
+export const seen=card=>card?.reviews||0;
+export function stage(card,known){
+ if(known)return {key:'known',label:'Known'};
+ if(!card||!card.reviews)return {key:'new',label:'New'};
+ if(!card.interval)return {key:'learning',label:'Learning'};
+ if(card.interval<7)return {key:'familiar',label:'Familiar'};
+ if(card.interval<21)return {key:'strong',label:'Strong'};
+ return {key:'locked',label:'Locked in'};
+}
+// One place decides what a graded answer does: it schedules the card, keeps the
+// word in the library, and retires it once it has been spelled cleanly MASTERY times.
+export function applyGrade(state,id,grade,now=Date.now()){
+ const card=schedule(state.cards[id],grade,now);
+ const cards={...state.cards,[id]:card};
+ if(card.clean>=MASTERY&&!state.known[id]){
+  const lib={...state.lib};delete lib[id];
+  return {next:{...state,cards,lib,known:{...state.known,[id]:now}},mastered:true};
+ }
+ const lib=state.known[id]?state.lib:{...state.lib,[id]:state.lib[id]||now};
+ return {next:{...state,cards,lib},mastered:false};
+}
 export const levels=['A1','A2','B1','B2','C1'];
 export const levelBlurb={A1:'First steps',A2:'Everyday life',B1:'New horizons',B2:'Going deeper',C1:'Nuance'};
 const posAlias={nom:'noun',adj:'adjective',adv:'adverb',num:'numeral'};

@@ -2,7 +2,7 @@ import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {BookOpen,Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Compass,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw} from 'lucide-react';
 import words from './words.json';
-import {sounds,chunks,scene,schedule,levels,levelBlurb,migrate,validate,posOf,empty} from './engine';
+import {sounds,chunks,scene,schedule,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,stage,MASTERY} from './engine';
 import {LevelChips,Cues,speak} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
@@ -106,8 +106,10 @@ function App({session}){
  };
 
  const rate=grade=>{
-  setState(s=>({...s,cards:{...s.cards,[w.id]:schedule(s.cards[w.id],grade)},lib:{...s.lib,[w.id]:s.lib[w.id]||Date.now()}}));
+  const climbed=grade!=='again'&&grade!=='hard'&&!state.known[w.id]&&(state.cards[w.id]?.clean||0)+1>=MASTERY;
+  setState(s=>applyGrade(s,w.id,grade).next);
   setTime(Date.now());
+  if(climbed)setNotice(`“${w.word}” reached ${MASTERY} clean answers and moved to your known words.`);
   const following=review?due.find(x=>x.id!==w.id):pool.find(x=>x.id!==w.id&&!state.cards[x.id]&&!state.known[x.id]);
   setSelected(following||null);setRevealed(!review);
   if(!following){setReview(false);setNotice(review?'You’re caught up. Come back when your next review is due.':'Every word in these levels has been introduced. Widen the level range.');setPage('Progress')}
@@ -173,7 +175,8 @@ function App({session}){
  <div className="setup-row"><span className="setup-label">LEVEL RANGE</span><LevelChips picked={picked} onChange={v=>{setPicked(v);setSelected(null);setReview(false);setRevealed(false)}}/></div>
  <div className="learning-grid"><section className="word-card">
   <div className="card-top"><span className="tag">{w.level} · {review?'REVIEW':'DISCOVER'}</span>
-   <span>{posOf(w)} <span className="sep">/</span> #{w.id.toString().padStart(4,'0')}</span></div>
+   <span className={'chip '+stage(state.cards[w.id],!!state.known[w.id]).key}>{stage(state.cards[w.id],!!state.known[w.id]).label}</span>
+   <span>mastery {mastery(state.cards[w.id])}/{MASTERY} <span className="sep">/</span> {posOf(w)}</span></div>
   <div className="word-center"><span className="prompt">{review?'Recall the meaning and your scene':'MEET YOUR NEXT WORD'}</span>
    <h2 lang="fr">{w.article||w.word}</h2>
    <button className="pronunciation" onClick={()=>say(w.word)}><span>/{w.ipa}/</span><Volume2 size={19}/></button>

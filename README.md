@@ -31,7 +31,7 @@ Signing in is required. Every word, review interval, personal scene, and counter
 Three tables hold it, each keyed by the bundled corpus id and each protected by row-level security that restricts every read and write to `auth.uid() = user_id`:
 
 - `echo_library` — one row per word you have met. `known_at` is null while you are studying it and set once you mark it known, so marking a word known moves the row rather than deleting it. Personal scenes live here too, in `note`.
-- `echo_reviews` — one row per scheduled word: due date, interval, and review count.
+- `echo_reviews` — one row per scheduled word: due date, interval, total answers, and the clean / close / missed split that mastery is computed from.
 - `echo_state` — one row per person: XP, rounds, best streak, the discover cursor, the level range, and the sound toggle.
 
 Writes are debounced by about a second and sent as a row-level diff, so a round of play sends only the words it actually touched. The sidebar and the Progress tab show whether the last write landed; if it failed, the app says so rather than pretending your work is saved. If you already had progress in this browser from before accounts existed, it is uploaded once on first sign-in.
@@ -46,7 +46,7 @@ Auth is email and password, with a reset-by-email flow. Two notes on the Supabas
 
 **Play** is a cloze round. A sentence appears with one word blanked and you type the missing word; the sentence fills in as you type. `Enter` checks, `Enter` again moves on, `Esc` leaves. Where the entry's lemma does not appear verbatim in its own example sentence (about 16% of the corpus, mostly conjugated verbs), the card asks you to spell the word from its English meaning instead, and the sentence is revealed after you answer.
 
-Answers are compared case-insensitively and with surrounding whitespace ignored, but **accents count**: a spelling that is right apart from its diacritics scores half and is graded Hard rather than Good, with the correct spelling shown. An accent row sits under the input for keyboards that cannot reach `é è ê à â î ï ô û ù ç œ`. Each card also shows the answer's letter count, an optional sound-cue hint, and a reveal button that counts the card as missed. A clean answer scores 100 plus 25 per streak step, capped at eight steps.
+Answers are compared case-insensitively and with surrounding whitespace ignored, but **accents count**: a spelling that is right apart from its diacritics scores half and is graded Hard rather than Good, with the correct spelling shown. An accent row sits under the input for keyboards that cannot reach `é è ê à â î ï ô û ù ç œ`. Each card also shows the answer's letter count, its running mastery, an optional sound-cue hint, a **reveal-a-letter** button that uncovers one more letter each press, and a reveal-the-answer button that counts the card as missed. Uncovered letters are not free: they downgrade a correct answer from clean to close, so mastery only ever advances on a word you produced yourself. A clean answer scores 100 plus 25 per streak step, capped at eight steps.
 
 Answering a card puts **every word of that sentence** into your library, not just the target. Sentence words are matched back to corpus entries with a rule-based inflection table — regular `-er`/`-ir`/`-re` endings, noun and adjective agreement, elisions such as `j'`/`l'`/`qu'`, and about fifty hand-written irregular verbs. Canonical entries always win over generated forms, so a real headword is never shadowed by another word's inflection. It is a heuristic, not a parser: rare forms are missed, and a look-alike form can attach to the wrong lemma.
 
@@ -60,7 +60,23 @@ Every deck skips words marked known. You can mark a word known mid-round with **
 
 **Sort** is one-gesture triage over the whole selected range. Swipe or drag right to add a word to your library, left to mark it known, down to skip labelling so it returns in a later session. Arrow keys do the same on a keyboard, `U` undoes the last card, and buttons do the same for anyone not using gestures.
 
-**Library** is the dedicated view of your own words: studying, known, or everything you have met, with search, an optional level filter, and per-word actions to mark known, restore to studying, or remove entirely. Removing a word also discards its review schedule.
+## Mastery, and what the numbers mean
+
+Every answer is filed as exactly one of three outcomes, in the game and on the Learn card alike:
+
+| Outcome | What counts | Score | Schedules as |
+|---|---|---|---|
+| **Clean** | spelled exactly, unaided | full | Good |
+| **Close** | an accent slip, or right with letters uncovered | half, streak survives | Hard |
+| **Missed** | wrong, or you revealed the answer | none | Again |
+
+**Mastery is the count of clean answers, out of ten.** Reach ten and the word retires itself into your known words, leaves your library, and stops appearing in rounds. Only clean answers move it: an accent slip or a letter hint still scores and still schedules the word, but the counter holds where it is, and the card says so. Mastery never falls — a bad answer costs you the schedule, not your progress.
+
+Alongside mastery each word carries an SRS **stage** read off its interval: New, Learning (interval 0, just missed or just started), Familiar (1–6 days), Strong (7–20), Locked in (21+), and Known.
+
+**Library** is the dedicated view of your own words: studying, known, or everything you have met, sortable by weakest first, due, recently added, or alphabetically, with search, an optional level filter, and per-word actions to mark known, restore to studying, or remove entirely. Removing a word also discards its review schedule.
+
+Every row shows its mastery out of ten as pips and its stage as a chip; expanding one gives the full activity for that word — times seen, clean, close and missed with a proportional bar, clean rate, when it is next due, when you last saw it, its current interval, and its example sentence.
 
 The level range is a set, not a single level — pick any combination from A1 to C1, or the whole span at once. It is shared across Play, Sort, Learn, and Vocabulary, and persists between visits.
 
@@ -83,4 +99,4 @@ Game answers feed the same schedule as the Learn tab: a correct answer counts as
 - Vocabulary knowledge alone does not constitute C1 proficiency. The dataset omits some function words and is not a complete language course.
 - Fonts load from Google Fonts with local fallbacks. Audio uses the browser's speech service and may require internet. The vocabulary, mnemonics, and clozes are all generated in the browser from bundled data; Supabase stores only your account and your progress.
 
-Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, review scheduling, inflected sentence-word matching, cloze construction and its corpus-wide coverage, accepted answers and letter counts, typed-answer checking and its accent tolerance, session queue filtering, and backup migration and rejection. A separate suite covers the sync layer: the state-to-row mapping in both directions, and the diff that decides what gets written, including that an unchanged state writes nothing and that removing a word deletes from both tables. A production build is also checked. Browser interaction tests are not included.
+Tests validate corpus size, required fields, pronunciation token coverage, longest-match chunking, gender markers, review scheduling, inflected sentence-word matching, cloze construction and its corpus-wide coverage, accepted answers and letter counts, typed-answer checking and its accent tolerance, session queue filtering, and backup migration and rejection. Mastery has its own coverage: that each grade lands in exactly one outcome bucket, that ten clean answers retire a word while accent slips and misses do not, that a graded word joins the library unless already known, and that stages follow the interval. A separate suite covers the sync layer: the state-to-row mapping in both directions, and the diff that decides what gets written, including that an unchanged state writes nothing and that removing a word deletes from both tables. A production build is also checked. Browser interaction tests are not included.

@@ -18,7 +18,8 @@ export function fromRows({library=[],reviews=[],state=null}){
   if(r.note)out.notes[id]=r.note;
  }
  for(const r of reviews)out.cards[String(r.word_id)]={
-  due:ms(r.due),interval:r.interval_days,reviews:r.reviews,last:ms(r.last_reviewed)};
+  due:ms(r.due),interval:r.interval_days,reviews:r.reviews,last:ms(r.last_reviewed),
+  clean:r.clean||0,close:r.close||0,missed:r.missed||0};
  if(state){
   out.xp=Number(state.xp)||0;out.rounds=state.rounds||0;out.best=state.best||0;
   out.cursor=state.cursor||0;out.sound=state.sound!==false;
@@ -37,8 +38,9 @@ export const libraryRow=(s,id)=>{
 export const reviewRow=(s,id)=>{
  const c=s.cards[id];
  if(!c)return null;
- return {word_id:Number(id),due:stamp(c.due),interval_days:Math.max(0,Math.round(c.interval||0)),
-  reviews:Math.max(0,Math.round(c.reviews||0)),last_reviewed:c.last?stamp(c.last):null};
+ const count=n=>Math.max(0,Math.round(n||0));
+ return {word_id:Number(id),due:stamp(c.due),interval_days:count(c.interval),reviews:count(c.reviews),
+  last_reviewed:c.last?stamp(c.last):null,clean:count(c.clean),close:count(c.close),missed:count(c.missed)};
 };
 export const stateRow=(s,picked)=>({
  xp:Math.max(0,Math.round(s.xp||0)),rounds:Math.max(0,s.rounds||0),best:Math.max(0,s.best||0),
@@ -70,7 +72,7 @@ export const hasContent=s=>!!(Object.keys(s.lib).length||Object.keys(s.known).le
 export async function load(userId){
  const [library,reviews,state]=await Promise.all([
   supabase.from('echo_library').select('word_id,note,known_at,added_at').eq('user_id',userId),
-  supabase.from('echo_reviews').select('word_id,due,interval_days,reviews,last_reviewed').eq('user_id',userId),
+  supabase.from('echo_reviews').select('word_id,due,interval_days,reviews,last_reviewed,clean,close,missed').eq('user_id',userId),
   supabase.from('echo_state').select('xp,rounds,best,cursor,sound,levels').eq('user_id',userId).maybeSingle()
  ]);
  for(const r of [library,reviews,state])if(r.error)throw r.error;
