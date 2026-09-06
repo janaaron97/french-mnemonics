@@ -14,6 +14,7 @@ const isAndroid=()=>/Android/.test(ua());
 // Chromium is the only engine with an install API; Firefox and Safari are not.
 const isChromium=()=>/Chrome|Chromium|CriOS|Edg/.test(ua())&&!/OPR|SamsungBrowser/.test(ua());
 const HIDE='echo-install-hidden';
+const ASKED='echo-install-asked';
 
 export function useInstall(){
  const [offer,setOffer]=useState(()=>(typeof window!=='undefined'&&window.__echoInstall)||null);
@@ -109,6 +110,9 @@ export async function installCheck(){
     catch{return `${i.sizes}:FAILED`}
    }));
    out.icons=icons.join('  ');
+   const shots=m.screenshots||[];
+   out.screenshots=shots.length?`${shots.length} (${shots.map(x=>x.sizes).join(' ')})`:'none — plain dialog, not the rich one';
+   out.richDialog=(shots.length&&m.description)?'eligible':'no: needs screenshots + description';
   }
  }catch(err){out.manifestError=err&&err.message}
  try{
@@ -129,6 +133,20 @@ export async function installCheck(){
 // needs to be findable, and the Progress panel alone is too well hidden.
 export function InstallNudge({offer,install,installed,ios,android,chromium}){
  const [hidden,setHidden]=useState(()=>{try{return localStorage.getItem(HIDE)==='1'}catch{return false}});
+ const showing=!installed&&!hidden&&offer;
+ useEffect(()=>{
+  // prompt() is gesture-gated, so Chrome never opens the dialog on its own.
+  // Arm the next tap once, and only while the nudge is actually on screen.
+  if(!showing)return;
+  try{if(localStorage.getItem(ASKED)==='1')return}catch{}
+  const fire=()=>{
+   window.removeEventListener('pointerdown',fire);
+   try{localStorage.setItem(ASKED,'1')}catch{}
+   install();
+  };
+  window.addEventListener('pointerdown',fire);
+  return()=>window.removeEventListener('pointerdown',fire);
+ },[showing]);
  const canManual=ios||(android&&chromium);
  if(installed||hidden||(!offer&&!canManual))return null;
  const dismiss=()=>{try{localStorage.setItem(HIDE,'1')}catch{}setHidden(true)};
