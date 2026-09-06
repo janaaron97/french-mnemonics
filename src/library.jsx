@@ -90,8 +90,7 @@ export default function Library({words,state,setState,picked,setPicked,notice,op
  },[studying,state.cards]);
 
  return <>
-  <div className="page-title"><div className="eyebrow">YOUR WORDS</div><h1>The library.</h1>
-   <p>Everything you have collected, and how each word is actually going. A word retires itself after {MASTERY} clean answers.</p></div>
+  <div className="page-title"><h1>Library</h1></div>
 
   <div className="lib-stats">
    <article className="lead"><strong>{studying.length.toLocaleString()}</strong><span>studying</span>

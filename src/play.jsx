@@ -1,6 +1,6 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
 import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,CornerDownLeft,LightbulbOff,Lightbulb} from 'lucide-react';
-import {queue,card,check,sentenceIds,applyGrade,mastery,MASTERY,posOf} from './engine';
+import {queue,card,check,sentenceIds,applyGrade,addDay,mastery,MASTERY,posOf} from './engine';
 import {LevelChips,Cues,speak,tone,buzz,useKeys,Counter} from './ui';
 
 const ROUND=[7,12,20];
@@ -60,7 +60,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   setState(st=>{
    const lib={...st.lib};
    for(const id of ids)if(!st.known[id]&&!lib[id])lib[id]=now;
-   const {next}=applyGrade({...st,lib},c.id,grades[outcome],now);
+   const {next}=applyGrade({...st,lib,days:addDay(st.days)},c.id,grades[outcome],now);
    return {...next,xp:next.xp+gain,cursor:v.mode==='discover'?Math.max(next.cursor,c.id):next.cursor};
   });
   const streak=ok?v.streak+1:0;
@@ -186,9 +186,8 @@ function Setup({counts,size,setSize,start,picked,setPicked,state}){
  return <>
   <div className="play-hero">
    <div>
-    <span className="eyebrow">CLOZE ARCADE</span>
-    <h1>Fill the gap.<br/>Keep the sentence.</h1>
-    <p>Type the missing word into the sentence. Every sentence you play drops all of its words into your library, so the round you are playing writes the rounds that follow.</p>
+    <h1>Play</h1>
+    <p>Every sentence you play drops all of its words into your library.</p>
    </div>
    <div className="xp-badge"><Zap size={18}/><Counter value={state.xp}/><span>XP · {state.rounds} rounds</span></div>
   </div>
@@ -201,7 +200,7 @@ function Setup({counts,size,setSize,start,picked,setPicked,state}){
   <div className="setup-row"><span className="setup-label">ROUND LENGTH</span>
    <div className="level-chips compact">{ROUND.map(n=><button key={n} className={size===n?'on':''} onClick={()=>setSize(n)}>{n} cards</button>)}</div>
   </div>
-  <p className="subtle">Answers feed the same spaced-repetition schedule as the Learn tab: a clean answer counts as Good, an accent slip as Hard, a miss as Again. Sound cues are invented memory hooks, not etymology.</p>
+  <p className="subtle">Clean answer = Good, accent slip or hint = Hard, miss = Again. {MASTERY} clean answers retires a word.</p>
  </>;
 }
 
@@ -209,8 +208,7 @@ function Summary({s,setStage,start,setState,openWord,notice}){
  const acc=s.answered?Math.round(s.right/s.answered*100):0;
  return <div className="summary">
   <Trophy size={32}/>
-  <span className="eyebrow">ROUND COMPLETE</span>
-  <h1>{acc>=90?'Nearly flawless.':acc>=60?'Solid round.':'Every miss is a word you now own.'}</h1>
+  <h1>Round complete</h1>
   <div className="score-grid">
    <article><Counter value={s.score}/><span>points</span></article>
    <article><strong>{acc}%</strong><span>{s.right} of {s.answered} spelled clean</span></article>

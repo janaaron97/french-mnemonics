@@ -36,6 +36,8 @@ Three tables hold it, each keyed by the bundled corpus id and each protected by 
 
 Writes are debounced by about a second and sent as a row-level diff, so a round of play sends only the words it actually touched. The sidebar and the Progress tab show whether the last write landed; if it failed, the app says so rather than pretending your work is saved. If you already had progress in this browser from before accounts existed, it is uploaded once on first sign-in.
 
+A day counts toward the streak once you have answered at least one card in it; the played days are stored and the current and longest streaks are derived from them, so the two cannot drift apart. Progress shows both plus the last thirteen weeks as a dot grid.
+
 The schema lives in `supabase/migrations/`, applied in filename order. Note the second file: enabling row-level security and writing policies is not sufficient on its own, because RLS decides *which rows* a request may touch and says nothing about whether the role may touch the table at all. Without the matching `grant`, every call fails with `permission denied for table echo_library`.
 
 The account menu sits in the header on every page — it shows the sync state, offers a retry if a write failed, and signs you out.
@@ -86,7 +88,13 @@ IPA, rather than spelling, determines each scene. Consonants are a fixed cast of
 
 The apostrophe-like aspirated-h marker is excluded from sound tokens: it indicates blocked liaison/elision, not a pronounced consonant. IPA may include only one of several valid pronunciations. Consult pronunciation references for liaison, regional variation, and context-sensitive words such as *plus*.
 
-Each entry starts with a generated scene-building prompt. Personalize it by opening **Make this scene yours**; the text saves on blur. These prompts are not 5,500 individually authored stories. Browser French text-to-speech reads words and example sentences; voice quality and availability depend on the device. No pronunciation assessment is performed.
+Opening a word gives you its full page: mastery and stage, the outcome split, when it is next due and when you last saw it, the sound cast, the mnemonic, and a sentence.
+
+The mnemonic is a staged scene, not a set of instructions to build one. Every character in the sound cast has actions it performs on whoever comes next, every vowel is a place the action can land in, and the closing sentence is the meaning — phrased by part of speech, so a noun is the thing left standing and a verb is what they are all doing. Eight variants come from two verb sets, two payoff phrasings, and two layouts; **Generate another** cycles them, **keep this one** freezes the current wording as your own, and **Write my own** replaces it (emptying the box falls back to generated text).
+
+English grammar cannot always place a location between two linked clauses, so the arrow chain above the prose stays authoritative for strict sound order while the prose reads naturally.
+
+**Another sentence** does not generate French. It borrows other corpus entries whose own example sentence happens to use this word, so every alternate is real, human-written French rather than something invented. That is a hard limit of the bundled data: about 39% of entries have at least one alternate, rising to 81% at A1, and the button says plainly when the corpus has nothing else. Browser French text-to-speech reads words and example sentences; voice quality and availability depend on the device. No pronunciation assessment is performed.
 
 Game answers feed the same schedule as the Learn tab: a correct answer counts as Good, a wrong one as Again. Review ratings schedule Again in one minute, Hard at 1.2× the previous interval (minimum one day), Good at 2.5× (minimum one day), and Easy at 3.5× (minimum four days). Intervals round to whole days. This is a simple interval scheduler, not FSRS. Progress lives on your account, so moving devices just means signing in. Export still produces an offline JSON backup worth keeping; import replaces your current progress and syncs the result up. Backups written before the library existed are still accepted: every word they had a review card for becomes a library word.
 

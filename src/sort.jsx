@@ -69,8 +69,7 @@ export default function Sort({words,state,setState,picked,setPicked,notice}){
  const glow=v=>flying?.verdict===v?1:v==='study'?Math.max(0,Math.min(1,d.dx/THROW)):v==='known'?Math.max(0,Math.min(1,-d.dx/THROW)):Math.max(0,Math.min(1,d.dy/THROW));
 
  return <>
-  <div className="page-title"><div className="eyebrow">TRIAGE</div><h1>Know it, or study it.</h1>
-   <p>Sweep the whole range from A1 to C1 and label each word in one gesture. Nothing here is a test.</p></div>
+  <div className="page-title"><h1>Sort</h1></div>
   <div className="setup-row"><span className="setup-label">LEVEL RANGE</span><LevelChips picked={picked} onChange={setPicked}/></div>
 
   {top?<>
@@ -100,10 +99,10 @@ export default function Sort({words,state,setState,picked,setPicked,notice}){
     <span>{sorted} sorted this session <i>·</i> {deck.length.toLocaleString()} unlabelled left in {picked.join(', ')}</span>
     {last&&<button className="ghost" onClick={undo}><Undo2 size={14}/> Undo “{last.word.word}” <kbd>U</kbd></button>}
    </div>
-   <p className="subtle">{last?verdicts[last.verdict].hint:'Swipe, drag, or use the arrow keys. Skipping leaves a word unlabelled so it returns in a later session.'}</p>
+   <p className="subtle">{last?verdicts[last.verdict].hint:'Swipe, drag, or use the arrow keys.'}</p>
   </>:<div className="empty-state">
    <Sparkles size={26}/><h3>Nothing left to sort in {picked.join(', ')}.</h3>
-   <p>Every word in this range is either in your library or marked known. Widen the level range to keep going.</p>
+   <p>Widen the level range to keep going.</p>
    <LevelChips picked={picked} onChange={setPicked}/>
   </div>}
  </>;

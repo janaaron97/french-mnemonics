@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,queue,migrate,validate,levels,applyGrade,mastery,stage,seen,MASTERY,empty} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,queue,migrate,validate,levels,applyGrade,mastery,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -154,4 +154,61 @@ test('mastery is clamped and safe on an unseen word',()=>{
  assert.equal(mastery(undefined),0);
  assert.equal(mastery({clean:99}),MASTERY);
  assert.equal(seen(undefined),0);
+});
+
+test('every mnemonic variant names the whole cast in order and lands on the meaning',()=>{
+ const w={ipa:'vaʃ',meaning:'cow',article:'la vache'};
+ const texts=[];
+ for(let v=0;v<SCENES;v++){
+  const text=scene(w,v);
+  assert.match(text,/silver ribbon/,'variant '+v+' lost the gender cue');
+  const chain=text.match(/vampire → beach → chef/);
+  assert.ok(chain,'variant '+v+' lost the ordered cast chain');
+  assert.match(text,/“cow”/,'variant '+v+' dropped the meaning');
+  texts.push(text);
+ }
+ assert.equal(new Set(texts).size,SCENES,'variants are not distinct');
+ assert.equal(scene(w,0),scene(w),'default variant moved');
+ assert.equal(scene(w,SCENES),scene(w,0),'variants do not wrap');
+ assert.equal(scene(w,-1),scene(w,SCENES-1),'negative variants do not wrap');
+ assert.match(scene({ipa:'a',meaning:'x',article:'le a'},3),/golden key/);
+ for(const w of words.slice(0,400)){
+  const text=scene(w,w.id%SCENES);
+  assert.ok(!/ ,|,,|\.\./.test(text),'punctuation glitch in '+w.word+': '+text);
+  assert.ok(!/(\bin the [a-z ]+) \1/.test(text),'repeated location in '+w.word+': '+text);
+  assert.match(text,/“/,'no meaning in '+w.word);
+ }
+});
+test('alternate sentences come from other entries, never the word itself',()=>{
+ const vache=words.find(w=>w.word==='vache');
+ const alt=alternates(vache,words);
+ assert.ok(alt.length>0);
+ assert.ok(alt.every(o=>o.id!==vache.id),'a word was offered its own sentence');
+ assert.ok(alt.every(o=>o.example.toLowerCase().includes('vache')),'a sentence does not mention the word');
+ assert.deepEqual(alternates(vache,words).map(o=>o.id),alt.map(o=>o.id),'the index is not stable');
+ assert.ok(Array.isArray(alternates({id:999999,word:'zzz',example:'x'},words)));
+});
+test('a day streak counts back from today, or from yesterday if today is idle',()=>{
+ const days=['2026-09-01','2026-09-02','2026-09-04','2026-09-05','2026-09-06'];
+ assert.equal(streak(days,'2026-09-06'),3);
+ assert.equal(streak(days,'2026-09-07'),3,'an idle today should not break the streak yet');
+ assert.equal(streak(days,'2026-09-08'),0,'a missed day should break it');
+ assert.equal(streak([],'2026-09-06'),0);
+ assert.equal(streak(['2026-09-06'],'2026-09-06'),1);
+ assert.equal(bestStreak(days),3);
+ assert.equal(bestStreak([]),0);
+ assert.equal(bestStreak(['2026-01-01','2026-03-01']),1);
+ assert.equal(bestStreak(['2026-02-28','2026-03-01']),2,'month boundary');
+ assert.equal(bestStreak(['2026-12-31','2027-01-01']),2,'year boundary');
+});
+test('recording a day is idempotent and stays sorted',()=>{
+ let days=[];
+ days=addDay(days,'2026-09-06');
+ days=addDay(days,'2026-09-06');
+ days=addDay(days,'2026-09-04');
+ assert.deepEqual(days,['2026-09-04','2026-09-06']);
+ assert.match(dayKey(new Date(2026,8,6)),/^2026-09-06$/);
+ const grid=lastDays(days,4,'2026-09-06');
+ assert.deepEqual(grid.map(d=>d.on),[false,true,false,true]);
+ assert.equal(grid.length,4);
 });

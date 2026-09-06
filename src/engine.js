@@ -5,7 +5,108 @@ export const sounds=[
 ].map(([ipa,name,emoji,type,spelling,example,hint])=>({ipa,name,emoji,type,spelling,example,hint}));
 export const chunks=[{ipa:'sjɔ̃',name:'Transformation machine',emoji:'⚙️',type:'chunk',hint:'A sound shortcut common in -tion words. It is not always a morpheme.'},{ipa:'mɑ̃',name:'Magic cloak',emoji:'🧥',type:'chunk',hint:'Common in -ment; often creates an adverb, but not always.'},{ipa:'aʒ',name:'Workshop',emoji:'🛠️',type:'chunk',hint:'Common in -age, often an action or result.'},{ipa:'ite',name:'Quality inspector',emoji:'🔎',type:'chunk',hint:'Common in -ité, often an abstract quality.'}];
 export function tokenize(ipa,compact=true){const keys=[...(compact?chunks:[]),...sounds].sort((a,b)=>b.ipa.length-a.ipa.length);let rest=ipa.normalize('NFC').replace(/[ʼˈˌ.\s/()‿]/g,'');let out=[];while(rest){const key=keys.find(s=>rest.startsWith(s.ipa));if(key){out.push(key);rest=rest.slice(key.ipa.length)}else{out.push({ipa:[...rest][0],name:'Unmapped sound',emoji:'◌',type:'unknown'});rest=rest.slice([...rest][0].length)}}return out}
-export function scene(w){const cues=tokenize(w.ipa);return `Picture ${cues.map(c=>c.type==='vowel'||c.type==='nasal'?`a scene at the ${c.name.toLowerCase()}`:c.name.toLowerCase()).join(' → ')}. In that exact order, make them act out “${w.meaning}”. ${w.article?.startsWith('la ')?'Add a silver ribbon to mark feminine gender.':w.article?.startsWith('le ')?'Add a golden key to mark masculine gender.':'If the article hides gender, check a dictionary before adding a gender prop.'}`}
+// Each character gets things it can DO to whatever comes next in the sound
+// order, so the cast acts instead of being listed; each vowel is somewhere the
+// action can happen. Two verbs apiece gives the generator room to vary.
+const acting={
+ p:['runs a cutlass through','kicks a barrel at'],      b:['bear-hugs','swats'],
+ t:['pounces on','drags off'],                          d:['handcuffs','shines a torch on'],
+ k:['yowls at','claws at'],                             'ɡ':['thumps its chest at','hurls'],
+ g:['thumps its chest at','hurls'],                     f:['sprinkles glitter over','shrinks'],
+ v:['sinks its fangs into','hypnotises'],               s:['coils around','hisses at'],
+ z:['kicks','stampedes past'],                          'ʃ':['flambés','plates up'],
+ 'ʒ':['saws clean through','makes a dove out of'],            m:['boxes in','mirrors'],
+ n:['vanishes behind','throws a smoke bomb at'],        'ɲ':['brings tears to','peels'],
+ 'ŋ':['jabs at','pins to the ropes'],                   l:['roars at','pads after'],
+ 'ʁ':['clamps onto','scans'],                           j:['whips around','loops the string round'],
+ w:['runs over','carts away'],                          'ɥ':['shrieks at','pierces the ear of'],
+ 'sjɔ̃':['swallows whole','transforms'],
+ 'mɑ̃':['throws a cloak over','spirits away'],
+ 'aʒ':['hammers','clamps to the workbench'],
+ 'ite':['stamps a seal on','measures up']
+};
+const setting={
+ 'ɑ̃':'in the echoing atrium', 'ɛ̃':'in the walled garden', 'ɔ̃':'up in the observatory',
+ 'œ̃':'in the perfume shop', a:'out on the beach', 'ɑ':'on the theatre stage',
+ i:'on the ice rink', y:'on the surface of the moon', u:'at the edge of the pool',
+ e:'in the café', 'ɛ':'deep in the library', o:'in the castle keep', 'ɔ':'down at the port',
+ 'ø':'in the fire station', 'œ':'in the flower shop', 'ə':'in the waiting room'
+};
+const place=c=>c.type==='vowel'||c.type==='nasal';
+const named=c=>c.name.toLowerCase();
+const article=n=>(/^[aeiou]/.test(n)?'an ':'a ')+n;
+const verb=(c,pick)=>(acting[c.ipa]||['collides with','shoves'])[pick%2];
+const where=c=>setting[c.ipa]||`at the ${named(c)}`;
+
+const payoffs={
+ noun:[m=>`When it all stops, the one thing still in one piece is ${m}.`,
+       m=>`And the thing at the centre of the mess, untouched, is ${m}.`],
+ verb:[m=>`Everything they are doing adds up to one act: ${m}.`,
+       m=>`Watch the whole thing again and what you are watching is ${m}.`],
+ adjective:[m=>`Every single thing in the frame comes out ${m}.`,
+            m=>`Whatever they touch turns ${m}.`],
+ adverb:[m=>`And all of it happens ${m}.`,
+         m=>`The whole scene runs ${m}.`],
+ numeral:[m=>`Count what is left on the floor: ${m}.`,
+          m=>`However you count the wreckage, it comes to ${m}.`],
+ other:[m=>`Whatever just happened, it means ${m}.`,
+        m=>`Freeze the frame: that is ${m}.`]
+};
+const gender=w=>w.article?.startsWith('la ')?'A silver ribbon flutters over it all — feminine.'
+ :w.article?.startsWith('le ')?'A golden key hangs above the scene — masculine.'
+ :'No gender prop: check a dictionary before you add one.';
+
+// Narrate the cast in sound order: each character acts on whoever comes next,
+// each vowel is where that lands, and the payoff sentence is the meaning. The
+// arrow chain above the prose stays authoritative for strict order, since
+// English grammar cannot always put a location between two linked clauses.
+const inanimate=new Set(['w','j','ɥ','sjɔ̃','mɑ̃','aʒ']);
+const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
+function staged(cues,pick){
+ const actors=cues.filter(c=>!place(c));
+ if(!actors.length)return `Hold one image and nothing else: ${where(cues[0])}`;
+ const spot=new Map();
+ let lead='',at=-1;
+ for(const c of cues){
+  if(place(c)){if(at<0)lead=where(c);else if(!spot.has(at+1))spot.set(at+1,where(c))}
+  else at++;
+ }
+ const clauses=actors.map((c,k)=>{
+  const next=actors[k+1];
+  const object=next?article(named(next)):(actors.length===1?'the empty air':['whatever is left of it','what little is still standing'][pick%2]);
+  const here=spot.get(k+1)?' '+spot.get(k+1):'';
+  const subject=k===0?article(named(c)):(inanimate.has(c.ipa)?'which':'who');
+  return `${subject} ${verb(c,pick)} ${object}${here}`;
+ });
+ return cap(lead?`${lead}, ${clauses.join(', ')}`:clauses.join(', '));
+}
+export const SCENES=8;
+export function scene(w,variant=0){
+ const v=((variant%SCENES)+SCENES)%SCENES;
+ const cues=tokenize(w.ipa);
+ const chain=cues.map(named).join(' → ');
+ const kind=payoffs[posOf(w)]?posOf(w):'other';
+ const body=staged(cues,Math.floor(v/4)%2);
+ const end=payoffs[kind][Math.floor(v/2)%2](`“${w.meaning}”`);
+ const shape=v%2?`${body}. ${end} (${chain})`:`${chain}. ${body}. ${end}`;
+ return `${shape} ${gender(w)}`.replace(/\s+/g,' ').replace(/ \./g,'.');
+}
+// Other corpus entries whose own example sentence uses this word: real French,
+// not generated, so it is only available where the corpus happens to supply it.
+const mentions=new WeakMap();
+export function alternates(w,list){
+ let map=mentions.get(list);
+ if(!map){
+  map=new Map();
+  for(const other of list)for(const id of sentenceIds(other.example,list)){
+   if(id===other.id)continue;
+   if(!map.has(id))map.set(id,[]);
+   map.get(id).push(other.id);
+  }
+  mentions.set(list,map);
+ }
+ return (map.get(w.id)||[]).map(id=>list[id-1]);
+}
 export const MASTERY=10;
 const tally={again:'missed',hard:'close',good:'clean',easy:'clean'};
 export function schedule(previous,grade,now=Date.now()){
@@ -184,11 +285,33 @@ export function queue({words,mode='discover',levels:picked,progress,now=Date.now
  return [...open.slice(from),...open.slice(0,from)].slice(0,size);
 }
 const plain=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
-export const empty={version:2,cards:{},notes:{},lib:{},known:{},cursor:0,xp:0,best:0,rounds:0,sound:true};
+const pad=n=>String(n).padStart(2,'0');
+export const dayKey=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+export const addDay=(days,day=dayKey())=>days.includes(day)?days:[...days,day].sort();
+const shift=(day,by)=>{const d=new Date(day+'T00:00:00');d.setDate(d.getDate()+by);return dayKey(d)};
+export function streak(days,from=dayKey()){
+ const set=new Set(days);
+ let at=set.has(from)?from:shift(from,-1),n=0;
+ while(set.has(at)){n++;at=shift(at,-1)}
+ return n;
+}
+export function bestStreak(days){
+ const sorted=[...new Set(days)].sort();
+ let best=0,run=0,prev=null;
+ for(const day of sorted){run=prev&&shift(prev,1)===day?run+1:1;best=Math.max(best,run);prev=day}
+ return best;
+}
+export function lastDays(days,count=91,from=dayKey()){
+ const set=new Set(days),out=[];
+ for(let i=count-1;i>=0;i--){const day=shift(from,-i);out.push({day,on:set.has(day)})}
+ return out;
+}
+export const empty={version:2,cards:{},notes:{},lib:{},known:{},days:[],cursor:0,xp:0,best:0,rounds:0,sound:true};
 export function migrate(saved){
  if(!saved||typeof saved!=='object'||Array.isArray(saved))return {...empty};
  const out={...empty,...saved,version:2,cards:plain(saved.cards),notes:plain(saved.notes),lib:plain(saved.lib),known:plain(saved.known)};
  if(!saved.lib)out.lib=Object.fromEntries(Object.keys(out.cards).map(id=>[id,0]));
+ out.days=Array.isArray(saved.days)?saved.days.filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort():[];
  for(const key of ['cursor','xp','best','rounds'])out[key]=Number.isFinite(out[key])?out[key]:0;
  out.sound=out.sound!==false;
  return out;

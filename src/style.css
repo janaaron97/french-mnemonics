@@ -340,3 +340,67 @@ kbd{font:600 10px/1 'DM Sans',sans-serif;border:1px solid currentColor;border-ra
  .filters .search{flex:1 1 100%}
  .filters select,.range-toggle{flex:1 1 0;min-width:0;font-size:12px;padding:11px 10px}
 }
+
+/* --- single word page --- */
+.word-page{max-width:760px;margin:34px 0 10px;display:grid;gap:16px}
+.word-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.word-head h1{font-family:Georgia,serif;font-size:52px;font-weight:400;letter-spacing:-2px;margin:0;overflow-wrap:anywhere}
+.word-head .ipa-line{display:inline-flex;align-items:center;gap:9px;font-size:17px;color:#7d8b75;margin-top:6px}
+.icon-btn{padding:9px;border-radius:8px;color:#8b9583}
+.icon-btn:hover{background:#e9eee1;color:#3d5445}
+.word-meaning{font-size:21px;color:#3d5445;margin:-6px 0 0}
+.word-tags{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.word-tags .dim{font-size:11px;color:#a3ac9a}
+.word-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;background:#fff;border:1px solid #dde2d7;border-radius:10px;padding:18px}
+.word-stats article{display:grid;gap:3px;align-content:start}
+.word-stats strong{font-family:Manrope,sans-serif;font-size:23px;font-weight:600;color:#33413a}
+.word-stats strong em{font-style:normal;font-size:13px;color:#93a08c}
+.word-stats strong.ok{color:#3f6b41}.word-stats strong.warn{color:#9a7b28}.word-stats strong.bad{color:#a2402f}
+.word-stats span{font-size:10.5px;letter-spacing:.4px;color:#93a08c}
+.word-stats .pips{display:flex;gap:2px;margin-top:4px}
+.word-stats .pips i{width:6px;height:6px;border-radius:2px;background:#e4e9dc}
+.word-stats .pips i.done{background:#71875e}
+.word-line{font-size:12.5px;color:#7c8a76;margin:-6px 0 0}
+.word-line i{font-style:normal;color:#bcc6b4;margin:0 3px}
+.panel{background:#fff;border:1px solid #dde2d7;border-radius:10px;padding:18px 20px;display:grid;gap:12px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.panel-head h2{font-size:12px;letter-spacing:1.4px;font-weight:700;color:#7b8d67;margin:0;text-transform:uppercase}
+.panel-head small{font-size:11px;color:#a3ac9a}
+.panel-actions{display:flex;gap:8px;flex-wrap:wrap}
+.panel-actions button{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#5f7263;border:1px solid #d9dfd2;border-radius:20px;padding:6px 12px}
+.panel-actions button:hover:not(:disabled){border-color:#9fb391;background:#f4f7ef}
+.panel-actions button:disabled{color:#a9b3a3;border-style:dashed}
+.scene-text{font-size:15px;line-height:1.7;color:#3f5445;margin:0}
+.panel-foot{font-size:11.5px;color:#93a08c;margin:0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.panel-foot .link{font-size:11.5px;color:#6a7d63;text-decoration:underline;text-underline-offset:3px;display:inline-flex;gap:5px;align-items:center}
+.note-edit textarea{min-height:120px;margin:0}
+.note-edit small{display:block;margin-top:8px;font-size:11px;color:#93a08c}
+.sentence-row{display:flex;gap:14px;align-items:center}
+.sentence-row p{font-size:16px;margin:0 0 4px}
+.sentence-row span{font-size:13px;color:#8b9583}
+.word-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.word-actions .rating{flex-wrap:wrap}
+
+/* --- daily streak --- */
+.streak-card{display:flex;align-items:center;gap:34px;flex-wrap:wrap;background:#20362a;color:#e9f1e0;border-radius:12px;padding:22px 24px;margin:22px 0}
+.streak-card>div{display:grid;gap:2px}
+.streak-card strong{font-family:Manrope,sans-serif;font-size:30px;font-weight:700;letter-spacing:-1px}
+.streak-card span{font-size:10.5px;letter-spacing:1.1px;color:#a8c2a6}
+.streak-grid{display:grid!important;grid-template-rows:repeat(7,1fr);grid-auto-flow:column;gap:3px;margin-left:auto}
+.streak-grid i{width:9px;height:9px;border-radius:2px;background:#ffffff1a}
+.streak-grid i.on{background:#7fc48f}
+@media(max-width:850px){.word-stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:650px){
+ .word-page{margin-top:22px}
+ .word-head h1{font-size:38px}
+ .word-meaning{font-size:18px}
+ .word-stats{grid-template-columns:repeat(2,1fr);padding:14px}
+ .streak-card{gap:20px;padding:18px}
+ .streak-grid{margin-left:0;width:100%;overflow-x:auto}
+}
+.stats{grid-template-columns:repeat(4,1fr)}
+.stats article{padding:20px}
+.stats strong{font-size:30px}
+.panel .cue-strip{margin:0;justify-content:flex-start}
+.panel .cue{padding:6px 4px}
+@media(max-width:850px){.stats{grid-template-columns:repeat(2,1fr)}}
