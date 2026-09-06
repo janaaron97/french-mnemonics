@@ -70,3 +70,22 @@ export function Counter({value,className}){
  },[value]);
  return <strong className={className}>{shown.toLocaleString()}</strong>;
 }
+
+// The on-screen keyboard shrinks the visual viewport but not the layout
+// viewport, so a bottom-anchored bar ends up underneath it. Track the real
+// visible height and let CSS anchor to that instead.
+export function useVisualViewport(){
+ useEffect(()=>{
+  const vv=window.visualViewport;
+  const root=document.documentElement;
+  const apply=()=>{
+   const h=vv?vv.height:window.innerHeight;
+   root.style.setProperty('--vvh',h+'px');
+   root.style.setProperty('--vvtop',(vv?vv.offsetTop:0)+'px');
+  };
+  apply();
+  if(!vv){window.addEventListener('resize',apply);return()=>window.removeEventListener('resize',apply)}
+  vv.addEventListener('resize',apply);vv.addEventListener('scroll',apply);
+  return()=>{vv.removeEventListener('resize',apply);vv.removeEventListener('scroll',apply)};
+ },[]);
+}

@@ -440,10 +440,10 @@ kbd{font:600 10px/1 'DM Sans',sans-serif;border:1px solid currentColor;border-ra
 .tool:hover:not(:disabled){background:#ffffff20;color:var(--text)}
 .tool.on{background:#e3b55229;color:var(--gold)}
 .tool:disabled{opacity:.3}
-.go{background:var(--green);color:var(--text);font:700 15px/1 'DM Sans',sans-serif;letter-spacing:1.5px;
+.go{background:var(--green);color:var(--green-ink);font:700 15px/1 'DM Sans',sans-serif;letter-spacing:1.5px;
  border-radius:12px;padding:17px 30px;display:inline-flex;align-items:center;gap:9px;transition:.15s}
 .go:hover{background:var(--green)}
-.go.teach{background:var(--gold)}
+.go.teach{background:var(--gold);color:var(--green-ink)}
 .go.teach:hover{background:var(--gold)}
 .arena.fail .go{background:var(--red);color:var(--text)}
 .arena.fail .go:hover{background:var(--red)}
@@ -594,3 +594,39 @@ footer{color:var(--dim)}
 .shelf-tabs button.on{background:transparent;border-bottom-color:var(--green)}
 .filters select,.range-toggle{color:var(--muted)}
 .xp-badge svg,.streak-card svg{color:var(--gold)}
+
+/* --- keep the round usable with the keyboard open --- */
+
+.arena-stage{min-height:0;flex:1;overflow-y:auto;width:100%}
+
+.done-screen{height:var(--vvh,100dvh);top:var(--vvtop,0);bottom:auto}
+
+/* --- mobile: nav becomes a drawer --- */
+.burger{display:none}
+.header-left{display:flex;align-items:center;gap:12px}
+.scrim{display:none}
+@media(max-width:850px){
+ .burger{display:inline-flex;padding:8px;margin-left:-8px;border-radius:9px;color:var(--muted)}
+ .burger:hover{background:var(--raise);color:var(--text)}
+ .scrim{display:block;position:fixed;inset:0;background:#000a;z-index:70}
+ aside{position:fixed;inset:0 auto 0 0;width:255px;max-width:82vw;transform:translateX(-100%);
+  transition:transform .22s ease;z-index:71;display:flex;flex-direction:column;background:var(--surface);
+  border-right:1px solid var(--line);padding:26px 18px;gap:0}
+ aside.open{transform:none}
+ aside .brand{display:block;text-align:left;font-size:38px;margin:0 6px 26px}
+ aside nav{display:grid;gap:4px;flex:none;justify-content:stretch}
+ aside nav button{flex-direction:row;justify-content:flex-start;gap:13px;font-size:14px;padding:13px 14px;border-radius:9px}
+ .sidebar-bottom{display:block;margin-top:auto;padding:20px 6px 0}
+ .nav-count{margin-left:auto;padding:2px 7px}
+ main{margin:0;padding:0 17px}
+}
+.arena-body{flex:1;min-height:0;width:100%;max-width:680px;margin:0 auto;display:flex;flex-direction:column;padding:0 18px}
+.arena-stage{flex:1;min-height:0;overflow-y:auto;padding:8px 0 14px;max-width:none;margin:0}
+.arena-bar{flex:0 0 auto;margin-top:0;padding:12px 0 calc(12px + env(safe-area-inset-bottom));background:var(--bg)}
+@media(max-width:650px){.arena-body{padding:0 14px}}
+/* one authoritative arena box: fixed to the visible viewport, never scrolls itself */
+.arena{position:fixed;left:0;right:0;top:var(--vvtop,0);bottom:auto;height:var(--vvh,100dvh);z-index:60;
+ display:flex;flex-direction:column;align-items:center;overflow:hidden;padding:0;
+ background:var(--bg);color:var(--text)}
+.arena-hud{flex:0 0 auto;width:100%;max-width:680px}
+.prompt-recall .blank{display:block;margin:16px auto 0}

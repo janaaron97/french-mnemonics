@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
-import {BookOpen,Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Compass,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw} from 'lucide-react';
+import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
 import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,mastery,stage,streak,bestStreak,lastDays,MASTERY} from './engine';
 import {LevelChips,Cues,speak} from './ui';
@@ -12,11 +12,10 @@ import Word from './word.jsx';
 import {supabase,load,save,diff,isEmpty,hasContent} from './cloud.js';
 import './style.css';
 
-const groups=[
- ['PRACTICE',[['Play',Gamepad2],['Sort',Layers2],['Learn',BookOpen]]],
- ['YOUR WORDS',[['Library',LibraryIcon],['Vocabulary',Layers]]],
- ['REFERENCE',[['Sound atlas',Compass],['Progress',ChartNoAxesColumnIncreasing]]]
-];
+// Learn and Sound atlas are reachable from a word and from its sound cast,
+// so they do not need to sit in the nav.
+const tabs=[['Play',Gamepad2],['Sort',Layers2],['Library',LibraryIcon],
+ ['Vocabulary',Layers],['Progress',ChartNoAxesColumnIncreasing]];
 const read=()=>{try{return migrate(JSON.parse(localStorage.getItem('echo-progress')))}catch{return migrate(null)}};
 const readLevels=()=>{try{const v=JSON.parse(localStorage.getItem('echo-levels'));return Array.isArray(v)&&v.length&&v.every(l=>levels.includes(l))?v:['A1']}catch{return ['A1']}};
 
@@ -40,13 +39,13 @@ function App({session}){
  const [state,setState]=useState(read),[page,setPage]=useState('Play'),[picked,setPicked]=useState(readLevels);
  const [query,setQuery]=useState(''),[selected,setSelected]=useState(null),[revealed,setRevealed]=useState(false);
  const [review,setReview]=useState(false),[notice,setNotice]=useState(''),[soundType,setSoundType]=useState('All');
- const [time,setTime]=useState(Date.now()),[launch,setLaunch]=useState(null);
+ const [time,setTime]=useState(Date.now()),[launch,setLaunch]=useState(null),[drawer,setDrawer]=useState(false);
 
  useEffect(()=>{try{localStorage.setItem('echo-progress',JSON.stringify(state))}catch{setNotice('Browser storage is full or unavailable. Export your progress before leaving.')}},[state]);
  useEffect(()=>{try{localStorage.setItem('echo-levels',JSON.stringify(picked))}catch{}},[picked]);
  useEffect(()=>{const id=setInterval(()=>setTime(Date.now()),15000);return()=>clearInterval(id)},[]);
  useEffect(()=>{
-  const shut=e=>{if(e.type==='pointerdown'||e.key==='Escape')setMenu(false)};
+  const shut=e=>{if(e.type==='pointerdown'||e.key==='Escape')setMenu(false);if(e.key==='Escape')setDrawer(false)};
   window.addEventListener('pointerdown',shut);window.addEventListener('keydown',shut);
   return()=>{window.removeEventListener('pointerdown',shut);window.removeEventListener('keydown',shut)};
  },[]);
@@ -131,15 +130,15 @@ function App({session}){
  const introduced=pool.filter(x=>state.cards[x.id]||state.known[x.id]).length;
  const shared={words,state,setState,picked,setPicked,notice:setNotice,openWord};
 
- return <div className="shell"><aside>
-  <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage('Play')}}>écho</a>
-  <nav>{groups.map(([label,items])=><React.Fragment key={label}>
-   <div className="nav-label">{label}</div>
-   {items.map(([name,Icon])=><button key={name} className={page===name?'active':''} onClick={()=>{setQuery('');setPage(name)}}>
-    <Icon size={18}/>{name}
-    {name==='Library'&&!!collected&&<span className="nav-count">{collected>999?'999+':collected}</span>}
-    {name==='Play'&&!!due.length&&<span className="nav-dot"/>}</button>)}
-  </React.Fragment>)}</nav>
+ const go=name=>{setQuery('');setPage(name);setDrawer(false)};
+ return <div className="shell">
+  {drawer&&<div className="scrim" onClick={()=>setDrawer(false)}/>}
+  <aside className={drawer?'open':''}>
+  <a className="brand" href="#" onClick={e=>{e.preventDefault();go('Play')}}>écho</a>
+  <nav>{tabs.map(([name,Icon])=><button key={name} className={page===name?'active':''} onClick={()=>go(name)}>
+   <Icon size={18}/>{name}
+   {name==='Library'&&!!collected&&<span className="nav-count">{collected>999?'999+':collected}</span>}
+   {name==='Play'&&!!due.length&&<span className="nav-dot"/>}</button>)}</nav>
   <div className="sidebar-bottom">
    <div className={'local '+sync}>{sync==='error'?<><CloudOff size={12}/> Not syncing — changes held here</>
     :sync==='saving'?<><RefreshCw size={12} className="spin"/> Saving…</>
@@ -147,7 +146,10 @@ function App({session}){
    <button className="signout" onClick={()=>supabase.auth.signOut()}><LogOut size={14}/> {session.user.email}</button></div>
  </aside>
 
- <main><header><div>{page}</div>
+ <main><header>
+  <div className="header-left">
+   <button className="burger" onClick={()=>setDrawer(true)} aria-label="Menu"><Menu size={22}/></button>
+   <span>{page}</span></div>
   <div className="header-right">
    <button className="review-pill" onClick={()=>due.length?toPlay('review'):setNotice('No reviews due yet. Play a round to begin your review schedule.')}>
     <span className="status-dot"/>{due.length} reviews due <ArrowRight size={15}/></button>

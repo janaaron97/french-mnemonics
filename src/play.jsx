@@ -1,7 +1,7 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
 import {X,ArrowRight,Check,Zap,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen} from 'lucide-react';
 import {queue,card,check,sentenceIds,applyGrade,addDay,mastery,streak as dayStreak,MASTERY,posOf} from './engine';
-import {LevelChips,Cues,speak,tone,buzz,useKeys,Counter} from './ui';
+import {LevelChips,Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor} from './generate.js';
 
 const ROUND=[7,12,20];
@@ -91,6 +91,11 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   settle(verdict,draft);
  };
  const teach=()=>{setTeaching(true);field.current?.focus()};
+ useEffect(()=>{
+  if(stage!=='play')return;
+  const id=setTimeout(()=>field.current?.scrollIntoView({block:'center',behavior:'smooth'}),350);
+  return()=>clearTimeout(id);
+ },[stage,s?.i]);
  const [explaining,setExplaining]=useState(0);
  const explain=async word=>{
   if(explaining)return;
@@ -131,6 +136,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  });
  useEffect(()=>{if(launch){onLaunched();start(launch)}},[launch]);
  useEffect(()=>()=>clearTimeout(timer.current),[]);
+ useVisualViewport();
 
  if(stage==='setup')return <Setup {...{counts,size,setSize,start,picked,setPicked,state}}/>;
  if(stage==='done')return <Summary {...{s,setStage,start,setState,state,openWord,notice,explain,explaining}}/>;
@@ -149,7 +155,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    </div>
   </div>
 
-  <form className="arena-stage" onSubmit={submit} key={c.id}>
+  <form className="arena-body" onSubmit={submit} key={c.id}>
+   <div className="arena-stage">
    {c.kind==='cloze'
     ? <p className="prompt" lang="fr">{words_(c.before)}<Blank {...{c,draft,setDraft,field,result,tone3,teaching}}/>{words_(c.after)}</p>
     : <div className="prompt-recall">
@@ -190,6 +197,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    </div>}
 
    {result&&state.notesOn[c.id]&&<div className="breakdown">{state.notesOn[c.id].text}</div>}
+
+   </div>
 
    <div className="arena-bar">
     <div className="tools" hidden={!!result}>
