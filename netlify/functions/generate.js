@@ -1,0 +1,109 @@
+// Server-side generation. The OpenAI key never reaches the browser.
+// Callers must present a valid Supabase access token, so this is not an open
+// proxy to the account's OpenAI credit.
+const SUPABASE_URL=process.env.SUPABASE_URL||'https://readnsbbkmvhguuiaxkv.supabase.co';
+const SUPABASE_KEY=process.env.SUPABASE_KEY||'sb_publishable_sFGKW5TGB3Mu9RjC2iJLhQ_TL1IJZMF';
+const MODEL=process.env.OPENAI_MODEL||'gpt-4o-mini';
+const DAILY_CAP=Number(process.env.ECHO_DAILY_GENERATIONS||120);
+const key=()=>process.env.OPENAI_API_KEY||process.env.OPENAI_KEY||process.env.VITE_OPENAI_API_KEY;
+
+const json=(code,body)=>({statusCode:code,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+const clean=s=>String(s==null?'':s).replace(/\s+/g,' ').trim();
+
+const SYSTEM=`You write mnemonics for a French vocabulary trainer that maps French PRONUNCIATION onto a fixed cast of characters and places.
+
+The user is given an ordered "sound cast" — one character or location per sound in the word, in the order the sounds are spoken. Your job is to stage ONE vivid, concrete, physical scene that:
+- uses EVERY cast member, in the order given, and no others;
+- treats characters as actors doing something to each other, and locations as where the action happens;
+- builds to the word's English meaning as the payoff, so recalling the meaning pulls the scene back, and the scene replays the sounds in order;
+- is absurd, physical and specific — something you could film. No abstractions, no explaining, no meta-commentary.
+
+Hard rules:
+- 2 to 3 sentences, under 60 words total.
+- Name each cast member with the exact name given.
+- The meaning must appear in double quotes exactly once.
+- Never mention IPA, phonetics, sounds, letters, spelling, syllables, or the French word itself.
+- End with the gender line you are given, verbatim, as its own sentence.`;
+
+const sentencePrompt=w=>`Write ONE natural French example sentence using "${w.word}" (${w.meaning}), suited to CEFR level ${w.level}.
+It must be different from this existing one: "${w.example}"
+Rules: 6-14 words, everyday register, the word appears exactly once, correct grammar and accents.
+Reply as JSON: {"french":"...","english":"..."} where english is a plain translation.`;
+
+const mnemonicPrompt=(w,cast,gender)=>`French word meaning: "${w.meaning}" (${w.pos||'word'}).
+Sound cast, in order: ${cast.map((c,i)=>`${i+1}. ${c.name}${c.place?' (a location)':''}`).join('  ')}
+Gender line to end with, verbatim: ${gender}
+Reply as JSON: {"scene":"..."}`;
+
+async function ask(messages,schemaKey){
+  const res=await fetch('https://api.openai.com/v1/chat/completions',{
+    method:'POST',
+    headers:{'content-type':'application/json',authorization:`Bearer ${key()}`},
+    body:JSON.stringify({model:MODEL,messages,temperature:1,max_tokens:400,response_format:{type:'json_object'}})
+  });
+  const body=await res.json();
+  if(!res.ok)throw new Error(body?.error?.message||`OpenAI returned ${res.status}`);
+  let parsed;
+  try{parsed=JSON.parse(body.choices[0].message.content)}catch{throw new Error('OpenAI did not return usable JSON')}
+  if(!parsed[schemaKey])throw new Error(`OpenAI response had no "${schemaKey}"`);
+  return parsed;
+}
+
+// A scene that drops half the cast is not a mnemonic; check before returning it.
+const missing=(text,cast)=>cast.filter(c=>!text.toLowerCase().includes(c.name.toLowerCase()));
+
+exports.handler=async event=>{
+  if(event.httpMethod!=='POST')return json(405,{error:'Use POST.'});
+  if(!key())return json(503,{error:'No OpenAI key on the server. Set OPENAI_API_KEY in the site environment and redeploy.'});
+
+  const token=(event.headers.authorization||'').replace(/^Bearer /i,'');
+  if(!token)return json(401,{error:'Sign in first.'});
+  const who=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{authorization:`Bearer ${token}`,apikey:SUPABASE_KEY}});
+  if(!who.ok)return json(401,{error:'That session is no longer valid. Sign in again.'});
+  const user=await who.json();
+
+  let payload;
+  try{payload=JSON.parse(event.body||'{}')}catch{return json(400,{error:'Bad request body.'})}
+  const {kind,word,cast=[],gender=''}=payload;
+  if(kind!=='mnemonic'&&kind!=='sentence')return json(400,{error:'Unknown generation kind.'});
+  if(!word?.word||!word?.meaning)return json(400,{error:'Missing word.'});
+
+  // daily cap, counted as the calling user so row-level security still applies
+  const today=new Date().toISOString().slice(0,10);
+  const head={authorization:`Bearer ${token}`,apikey:SUPABASE_KEY,'content-type':'application/json'};
+  const usageUrl=`${SUPABASE_URL}/rest/v1/echo_generation_usage`;
+  let used=0;
+  try{
+    const r=await fetch(`${usageUrl}?user_id=eq.${user.id}&day=eq.${today}&select=requests`,{headers:head});
+    used=(await r.json())?.[0]?.requests||0;
+  }catch{}
+  if(used>=DAILY_CAP)return json(429,{error:`Daily generation limit reached (${DAILY_CAP}). It resets tomorrow.`});
+
+  try{
+    let out;
+    if(kind==='sentence'){
+      const {french,english}=await ask([{role:'system',content:'You write natural, grammatical French for a learner. Reply only as JSON.'},
+        {role:'user',content:sentencePrompt(word)}],'french');
+      if(!clean(french).toLowerCase().includes(word.word.toLowerCase().slice(0,Math.max(3,word.word.length-2))))
+        throw new Error('The sentence came back without the word in it.');
+      out={french:clean(french),english:clean(english)};
+    }else{
+      if(!cast.length)return json(400,{error:'Missing sound cast.'});
+      const messages=[{role:'system',content:SYSTEM},{role:'user',content:mnemonicPrompt(word,cast,gender)}];
+      let {scene}=await ask(messages,'scene');
+      let gaps=missing(scene,cast);
+      if(gaps.length){
+        messages.push({role:'assistant',content:JSON.stringify({scene})});
+        messages.push({role:'user',content:`That scene left out: ${gaps.map(c=>c.name).join(', ')}. Rewrite it so every cast member appears, still in order, same rules.`});
+        ({scene}=await ask(messages,'scene'));
+        gaps=missing(scene,cast);
+      }
+      out={scene:clean(scene),incomplete:gaps.map(c=>c.name)};
+    }
+    fetch(usageUrl,{method:'POST',headers:{...head,Prefer:'resolution=merge-duplicates'},
+      body:JSON.stringify({user_id:user.id,day:today,requests:used+1})}).catch(()=>{});
+    return json(200,{...out,used:used+1,cap:DAILY_CAP});
+  }catch(err){
+    return json(502,{error:err.message||'Generation failed.'});
+  }
+};

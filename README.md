@@ -30,7 +30,7 @@ Signing in is required. Every word, review interval, personal scene, and counter
 
 Three tables hold it, each keyed by the bundled corpus id and each protected by row-level security that restricts every read and write to `auth.uid() = user_id`:
 
-- `echo_library` — one row per word you have met. `known_at` is null while you are studying it and set once you mark it known, so marking a word known moves the row rather than deleting it. Personal scenes live here too, in `note`.
+- `echo_library` — one row per word you have met, including any generated mnemonic (`note` plus `note_ai`) and generated sentence (`sentence`, `sentence_en`). `known_at` is null while you are studying it and set once you mark it known, so marking a word known moves the row rather than deleting it. Personal scenes live here too, in `note`.
 - `echo_reviews` — one row per scheduled word: due date, interval, total answers, and the clean / close / missed split that mastery is computed from.
 - `echo_state` — one row per person: XP, rounds, best streak, the discover cursor, the level range, and the sound toggle.
 
@@ -93,6 +93,10 @@ Opening a word gives you its full page: mastery and stage, the outcome split, wh
 The mnemonic is a staged scene, not a set of instructions to build one. Every character in the sound cast has actions it performs on whoever comes next, every vowel is a place the action can land in, and the closing sentence is the meaning — phrased by part of speech, so a noun is the thing left standing and a verb is what they are all doing. Eight variants come from two verb sets, two payoff phrasings, and two layouts; **Generate another** cycles them, **keep this one** freezes the current wording as your own, and **Write my own** replaces it (emptying the box falls back to generated text).
 
 English grammar cannot always place a location between two linked clauses, so the arrow chain above the prose stays authoritative for strict sound order while the prose reads naturally.
+
+**Write one with AI** replaces the template with a real one. It is never automatic: nothing calls the model on render, on navigation, or in the background — only that button and its counterpart in the sentence panel do, one word at a time. The result is saved to the word, labelled as generated, and read back from then on. A generated mnemonic gets the ordered sound cast, the meaning, the part of speech, and the gender line, and is required to use every cast member in order and land on the meaning; the server checks the returned scene actually names them all and asks for one rewrite if it does not. The same button in the sentence panel writes a fresh French example for the word, which then sits ahead of the corpus ones.
+
+The key stays on the server. `netlify/functions/generate.js` reads `OPENAI_API_KEY` from the site environment (`OPENAI_KEY` also works), verifies the caller's Supabase access token before spending anything, and enforces a per-user daily cap in `echo_generation_usage` — so the endpoint is not an open proxy to the account's credit. `OPENAI_MODEL` overrides the model (default `gpt-4o-mini`) and `ECHO_DAILY_GENERATIONS` the cap. If the key is missing the app says exactly that rather than failing quietly.
 
 **Another sentence** does not generate French. It borrows other corpus entries whose own example sentence happens to use this word, so every alternate is real, human-written French rather than something invented. That is a hard limit of the bundled data: about 39% of entries have at least one alternate, rising to 81% at A1, and the button says plainly when the corpus has nothing else. Browser French text-to-speech reads words and example sentences; voice quality and availability depend on the device. No pronunciation assessment is performed.
 

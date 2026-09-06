@@ -306,10 +306,10 @@ export function lastDays(days,count=91,from=dayKey()){
  for(let i=count-1;i>=0;i--){const day=shift(from,-i);out.push({day,on:set.has(day)})}
  return out;
 }
-export const empty={version:2,cards:{},notes:{},lib:{},known:{},days:[],cursor:0,xp:0,best:0,rounds:0,sound:true};
+export const empty={version:2,cards:{},notes:{},aiNotes:{},phrases:{},lib:{},known:{},days:[],cursor:0,xp:0,best:0,rounds:0,sound:true};
 export function migrate(saved){
  if(!saved||typeof saved!=='object'||Array.isArray(saved))return {...empty};
- const out={...empty,...saved,version:2,cards:plain(saved.cards),notes:plain(saved.notes),lib:plain(saved.lib),known:plain(saved.known)};
+ const out={...empty,...saved,version:2,cards:plain(saved.cards),notes:plain(saved.notes),aiNotes:plain(saved.aiNotes),phrases:plain(saved.phrases),lib:plain(saved.lib),known:plain(saved.known)};
  if(!saved.lib)out.lib=Object.fromEntries(Object.keys(out.cards).map(id=>[id,0]));
  out.days=Array.isArray(saved.days)?saved.days.filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort():[];
  for(const key of ['cursor','xp','best','rounds'])out[key]=Number.isFinite(out[key])?out[key]:0;
@@ -320,10 +320,10 @@ export function validate(data,words){
  const d=plain(data);
  if(d.version!==1&&d.version!==2)return null;
  const ids=new Set(words.map(w=>String(w.id)));
- for(const key of ['cards','notes','lib','known'])if(key in d&&plain(d[key])!==d[key])return null;
+ for(const key of ['cards','notes','aiNotes','phrases','lib','known'])if(key in d&&plain(d[key])!==d[key])return null;
  for(const [id,c] of Object.entries(plain(d.cards)))
   if(!ids.has(id)||!c||!Number.isFinite(c.due)||!Number.isFinite(c.interval)||c.interval<0||!Number.isFinite(c.reviews))return null;
  for(const [id,n] of Object.entries(plain(d.notes)))if(!ids.has(id)||typeof n!=='string')return null;
- for(const key of ['lib','known'])for(const id of Object.keys(plain(d[key])))if(!ids.has(id))return null;
+ for(const key of ['lib','known','aiNotes','phrases'])for(const id of Object.keys(plain(d[key])))if(!ids.has(id))return null;
  return migrate(d);
 }

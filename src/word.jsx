@@ -1,7 +1,8 @@
 import React,{useState,useMemo,useEffect} from 'react';
-import {Volume2,ArrowRight,Check,Plus,X,RotateCcw,Shuffle,Pencil,Trash2} from 'lucide-react';
+import {Volume2,ArrowRight,Check,Plus,X,RotateCcw,Shuffle,Pencil,Trash2,Sparkles,Loader2} from 'lucide-react';
 import {scene,SCENES,alternates,tokenize,schedule,stage,mastery,seen,posOf,MASTERY} from './engine';
 import {Cues,speak} from './ui';
+import {mnemonicFor,sentenceFor} from './generate.js';
 
 const DAY=86400000;
 const ago=ms=>{const d=Math.floor((Date.now()-ms)/DAY);return d<=0?'today':d===1?'yesterday':d<30?d+' days ago':Math.round(d/30)+' months ago'};
@@ -14,20 +15,43 @@ const dueIn=(card,now)=>{
 
 export default function Word({w,words,state,setState,notice,review,revealed,setRevealed,onRate,onExplore,onClose}){
  const [variant,setVariant]=useState(0),[editing,setEditing]=useState(false),[alt,setAlt]=useState(0);
+ const [busy,setBusy]=useState(''),[failed,setFailed]=useState('');
  const card=state.cards[w.id],known=!!state.known[w.id],now=Date.now();
  const step=stage(card,known),done=mastery(card),total=seen(card);
- const note=state.notes[w.id]||'';
+ const note=state.notes[w.id]||'',ai=!!state.aiNotes[w.id];
  const others=useMemo(()=>alternates(w,words),[w.id,words]);
- const sentences=useMemo(()=>[{example:w.example,translation:w.translation,from:null},
-  ...others.map(o=>({example:o.example,translation:o.translation,from:o}))],[w.id,others]);
+ const mine=state.phrases[w.id];
+ const sentences=useMemo(()=>[
+  ...(mine?[{example:mine.fr,translation:mine.en,from:null,made:true}]:[]),
+  {example:w.example,translation:w.translation,from:null},
+  ...others.map(o=>({example:o.example,translation:o.translation,from:o}))],[w.id,others,mine?.fr]);
  const shown=sentences[alt%sentences.length];
- useEffect(()=>{setVariant(0);setAlt(0);setEditing(false)},[w.id]);
+ useEffect(()=>{setVariant(0);setAlt(0);setEditing(false);setBusy('');setFailed('')},[w.id]);
 
- const save=text=>setState(s=>{
-  const notes={...s.notes};
-  if(text.trim())notes[w.id]=text.trim();else delete notes[w.id];
-  return {...s,notes,lib:s.known[w.id]?s.lib:{...s.lib,[w.id]:s.lib[w.id]||Date.now()}};
+ const save=(text,byAI=false)=>setState(s=>{
+  const notes={...s.notes},aiNotes={...s.aiNotes};
+  if(text.trim()){notes[w.id]=text.trim();if(byAI)aiNotes[w.id]=1;else delete aiNotes[w.id]}
+  else{delete notes[w.id];delete aiNotes[w.id]}
+  return {...s,notes,aiNotes,lib:s.known[w.id]?s.lib:{...s.lib,[w.id]:s.lib[w.id]||Date.now()}};
  });
+ // Generation is always an explicit choice: nothing here runs on render.
+ const run=async(what,job)=>{
+  setBusy(what);setFailed('');
+  try{await job()}catch(err){setFailed(err?.message||'Generation failed.')}
+  setBusy('');
+ };
+ const writeMnemonic=()=>run('mnemonic',async()=>{
+  const {scene:text,incomplete}=await mnemonicFor(w);
+  save(text,true);
+  if(incomplete?.length)notice(`Generated, but it left out: ${incomplete.join(', ')}. Generate again for a cleaner one.`);
+ });
+ const writeSentence=()=>run('sentence',async()=>{
+  const {french,english}=await sentenceFor(w);
+  setState(s=>({...s,phrases:{...s.phrases,[w.id]:{fr:french,en:english}},
+   lib:s.known[w.id]?s.lib:{...s.lib,[w.id]:s.lib[w.id]||Date.now()}}));
+  setAlt(0);
+ });
+ const dropSentence=()=>setState(s=>{const phrases={...s.phrases};delete phrases[w.id];return {...s,phrases}});
  const collect=()=>setState(s=>({...s,lib:{...s.lib,[w.id]:Date.now()}}));
  const fileKnown=()=>{setState(s=>{const lib={...s.lib};delete lib[w.id];
   return {...s,known:{...s.known,[w.id]:Date.now()},lib}});notice(`“${w.word}” marked known.`)};
@@ -71,8 +95,10 @@ export default function Word({w,words,state,setState,notice,review,revealed,setR
   <section className="panel">
    <div className="panel-head"><h2>Mnemonic</h2>
     <div className="panel-actions">
-     <button onClick={()=>setVariant(v=>v+1)}><Shuffle size={14}/> Generate another</button>
-     {!editing&&<button onClick={()=>setEditing(true)}><Pencil size={14}/> {note?'Edit mine':'Write my own'}</button>}
+     <button onClick={writeMnemonic} disabled={!!busy} className="ai">
+      {busy==='mnemonic'?<Loader2 size={14} className="spin"/>:<Sparkles size={14}/>} Write one with AI</button>
+     <button onClick={()=>setVariant(v=>v+1)}><Shuffle size={14}/> Another template</button>
+     {!editing&&<button onClick={()=>setEditing(true)}><Pencil size={14}/> {note?'Edit':'Write my own'}</button>}
     </div></div>
    {editing
     ?<div className="note-edit">
@@ -83,8 +109,10 @@ export default function Word({w,words,state,setState,notice,review,revealed,setR
      </div>
     :<>
       <p className="scene-text">{note||scene(w,variant)}</p>
-      <p className="panel-foot">{note?'Your scene.':`Generated from the sounds above · variant ${variant%SCENES+1} of ${SCENES}`}
-       {note&&<button className="link" onClick={()=>save('')}><Trash2 size={13}/> drop mine</button>}
+      <p className="panel-foot">
+       {note?(ai?'Written by AI from the sound cast, saved to this word.':'Your scene.')
+        :`Template · variant ${variant%SCENES+1} of ${SCENES}`}
+       {note&&<button className="link" onClick={()=>save('')}><Trash2 size={13}/> drop it</button>}
        {!note&&<button className="link" onClick={()=>save(scene(w,variant))}>keep this one</button>}</p>
      </>}
   </section>
@@ -92,15 +120,20 @@ export default function Word({w,words,state,setState,notice,review,revealed,setR
   <section className="panel">
    <div className="panel-head"><h2>In a sentence</h2>
     <div className="panel-actions">
+     <button onClick={writeSentence} disabled={!!busy} className="ai">
+      {busy==='sentence'?<Loader2 size={14} className="spin"/>:<Sparkles size={14}/>} {mine?'Write another':'Write one with AI'}</button>
      <button onClick={()=>setAlt(a=>a+1)} disabled={sentences.length<2}>
-      <RotateCcw size={14}/> {sentences.length<2?'no others in the corpus':'Another sentence'}</button>
+      <RotateCcw size={14}/> {sentences.length<2?'only one in the corpus':'Next sentence'}</button>
     </div></div>
+   {failed&&<p className="gen-error" role="alert">{failed}</p>}
    <div className="sentence-row">
     <button className="say" onClick={()=>speak(shown.example,notice)} aria-label="Hear it"><Volume2 size={17}/></button>
     <div><p lang="fr">{shown.example}</p><span>{shown.translation}</span></div>
    </div>
-   <p className="panel-foot">{sentences.length<2?'The corpus only carries one sentence for this word.'
-    :`${alt%sentences.length+1} of ${sentences.length} · ${shown.from?`borrowed from “${shown.from.word}”`:'this word’s own sentence'}`}</p>
+   <p className="panel-foot">
+    {`${alt%sentences.length+1} of ${sentences.length} · `}
+    {shown.made?'written by AI for this word':shown.from?`borrowed from “${shown.from.word}”`:'the corpus sentence for this word'}
+    {shown.made&&<button className="link" onClick={dropSentence}><Trash2 size={13}/> drop it</button>}</p>
   </section>
 
   <div className="word-actions">

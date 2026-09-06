@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {empty} from '../src/engine.js';
 import {fromRows,diff,isEmpty,hasContent,libraryRow,reviewRow,stateRow} from '../src/cloud.js';
 
-const blank=()=>({...empty,cards:{},notes:{},lib:{},known:{}});
+const blank=()=>({...empty,cards:{},notes:{},aiNotes:{},phrases:{},lib:{},known:{}});
 const iso=ms=>new Date(ms).toISOString();
 
 test('outcome counters survive the round trip and drive writes',()=>{
@@ -20,8 +20,8 @@ test('outcome counters survive the round trip and drive writes',()=>{
 test('a studying word, a known word and a note round-trip through rows',()=>{
  const s={...blank(),lib:{'7':1000},known:{'9':2000},notes:{'7':'my scene'},
   cards:{'7':{due:5000,interval:3,reviews:2,last:4000}}};
- assert.deepEqual(libraryRow(s,'7'),{word_id:7,note:'my scene',known_at:null,added_at:iso(1000)});
- assert.deepEqual(libraryRow(s,'9'),{word_id:9,note:'',known_at:iso(2000),added_at:iso(2000)});
+ assert.deepEqual(libraryRow(s,'7'),{word_id:7,note:'my scene',note_ai:false,sentence:null,sentence_en:null,known_at:null,added_at:iso(1000)});
+ assert.deepEqual(libraryRow(s,'9'),{word_id:9,note:'',note_ai:false,sentence:null,sentence_en:null,known_at:iso(2000),added_at:iso(2000)});
  assert.equal(libraryRow(s,'11'),null);
  assert.deepEqual(reviewRow(s,'7'),{word_id:7,due:iso(5000),interval_days:3,reviews:2,last_reviewed:iso(4000),clean:0,close:0,missed:0});
  assert.equal(reviewRow(s,'9'),null);
@@ -80,4 +80,24 @@ test('hasContent distinguishes a used account from a fresh one',()=>{
  assert.equal(hasContent(blank()),false);
  assert.equal(hasContent({...blank(),known:{'3':1}}),true);
  assert.equal(hasContent({...blank(),notes:{'3':'x'}}),false);
+});
+
+test('a generated mnemonic and sentence round-trip and are labelled',()=>{
+ const s={...blank(),lib:{'7':1},notes:{'7':'a staged scene'},aiNotes:{'7':1},
+  phrases:{'7':{fr:'Une phrase.',en:'A sentence.'}}};
+ const row=libraryRow(s,'7');
+ assert.equal(row.note_ai,true);
+ assert.equal(row.sentence,'Une phrase.');
+ assert.equal(row.sentence_en,'A sentence.');
+ const back=fromRows({library:[row]}).state;
+ assert.equal(back.notes['7'],'a staged scene');
+ assert.equal(back.aiNotes['7'],1);
+ assert.deepEqual(back.phrases['7'],{fr:'Une phrase.',en:'A sentence.'});
+ assert.ok(isEmpty(diff(s,s,['A1'],['A1'])));
+ assert.equal(diff(s,{...s,phrases:{}},['A1'],['A1']).upLibrary[0].sentence,null);
+ const handwritten={...s,aiNotes:{}};
+ assert.equal(libraryRow(handwritten,'7').note_ai,false);
+ assert.equal(diff(s,handwritten,['A1'],['A1']).upLibrary.length,1,'authorship change must sync');
+ assert.equal(fromRows({library:[{word_id:7,note:'',note_ai:true,known_at:null,added_at:iso(1)}]}).state.aiNotes['7'],undefined,
+  'an empty note is not an AI note');
 });

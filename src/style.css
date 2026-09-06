@@ -404,3 +404,6 @@ kbd{font:600 10px/1 'DM Sans',sans-serif;border:1px solid currentColor;border-ra
 .panel .cue-strip{margin:0;justify-content:flex-start}
 .panel .cue{padding:6px 4px}
 @media(max-width:850px){.stats{grid-template-columns:repeat(2,1fr)}}
+.panel-actions button.ai{border-color:#cdbf8e;color:#7a6a2f;background:#fbf7ea}
+.panel-actions button.ai:hover:not(:disabled){border-color:#b9a45e;background:#f6efdb}
+.gen-error{font-size:12.5px;color:#a2402f;background:#f7e7e3;border-radius:6px;padding:10px 12px;margin:0}
