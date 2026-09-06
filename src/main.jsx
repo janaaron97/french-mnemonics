@@ -44,10 +44,17 @@ function App({session}){
  useEffect(()=>{try{localStorage.setItem('echo-progress',JSON.stringify(state))}catch{setNotice('Browser storage is full or unavailable. Export your progress before leaving.')}},[state]);
  useEffect(()=>{try{localStorage.setItem('echo-levels',JSON.stringify(picked))}catch{}},[picked]);
  useEffect(()=>{const id=setInterval(()=>setTime(Date.now()),15000);return()=>clearInterval(id)},[]);
+ useEffect(()=>{
+  const shut=e=>{if(e.type==='pointerdown'||e.key==='Escape')setMenu(false)};
+  window.addEventListener('pointerdown',shut);window.addEventListener('keydown',shut);
+  return()=>{window.removeEventListener('pointerdown',shut);window.removeEventListener('keydown',shut)};
+ },[]);
 
  const [sync,setSync]=useState('loading');
+ const [attempt,setAttempt]=useState(0),[menu,setMenu]=useState(false);
  const synced=useRef({state:null,levels:null});
  const userId=session.user.id;
+ const retry=()=>{setSync('loading');setNotice('');setAttempt(n=>n+1)};
 
  useEffect(()=>{
   let live=true;
@@ -66,7 +73,7 @@ function App({session}){
    }catch(err){if(live){setSync('error');setNotice('Could not reach your account: '+(err?.message||'unknown error')+'. Changes are held on this device.')}}
   })();
   return()=>{live=false};
- },[userId]);
+ },[userId,attempt]);
 
  useEffect(()=>{
   if(sync==='loading'||!synced.current.state)return;
@@ -137,8 +144,23 @@ function App({session}){
  </aside>
 
  <main><header><div><span className="eyebrow">YOUR SOUND PALACE</span><span className="header-divider">/</span>{page}</div>
-  <button className="review-pill" onClick={()=>due.length?toPlay('review'):setNotice('No reviews due yet. Play a round to begin your review schedule.')}>
-   <span className="status-dot"/>{due.length} reviews due <ArrowRight size={15}/></button></header>
+  <div className="header-right">
+   <button className="review-pill" onClick={()=>due.length?toPlay('review'):setNotice('No reviews due yet. Play a round to begin your review schedule.')}>
+    <span className="status-dot"/>{due.length} reviews due <ArrowRight size={15}/></button>
+   <div className="account-menu" onPointerDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()}>
+    <button className={'avatar '+sync} onClick={()=>setMenu(m=>!m)} aria-haspopup="menu" aria-expanded={menu}
+     aria-label={'Account: '+session.user.email}>{(session.user.email||'?')[0].toUpperCase()}</button>
+    {menu&&<div className="account-pop" role="menu">
+     <span className="pop-email">{session.user.email}</span>
+     <span className={'sync-pill '+sync}>{sync==='error'?<><CloudOff size={13}/> not syncing</>
+      :sync==='saving'?<><RefreshCw size={13} className="spin"/> saving</>
+      :sync==='loading'?<><RefreshCw size={13} className="spin"/> loading</>
+      :<><Check size={13}/> synced</>}</span>
+     {sync==='error'&&<button onClick={()=>{setMenu(false);retry()}}><RefreshCw size={15}/> Try again</button>}
+     <button onClick={()=>supabase.auth.signOut()}><LogOut size={15}/> Sign out</button>
+    </div>}
+   </div>
+  </div></header>
  {notice&&<div role="status" className="notice">{notice}<button aria-label="Dismiss notification" onClick={()=>setNotice('')}><X size={16}/></button></div>}
 
  {page==='Play'&&<Play {...shared} launch={launch} onLaunched={()=>setLaunch(null)}/>}
@@ -241,6 +263,7 @@ function App({session}){
     :sync==='saving'?<><RefreshCw size={13} className="spin"/> saving</>
     :sync==='loading'?<><RefreshCw size={13} className="spin"/> loading</>
     :<><Check size={13}/> synced</>}</span>
+   {sync==='error'&&<button className="ghost-btn" onClick={retry}><RefreshCw size={15}/> Try again</button>}
    <button className="ghost-btn" onClick={()=>supabase.auth.signOut()}><LogOut size={15}/> Sign out</button></div>
   <p>Your library, known words, review schedule, and personal scenes live on your account and follow you to any device you sign in on.</p></section>
  <section className="backup"><h3>Keep your memories.</h3>

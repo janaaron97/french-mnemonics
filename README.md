@@ -36,6 +36,10 @@ Three tables hold it, each keyed by the bundled corpus id and each protected by 
 
 Writes are debounced by about a second and sent as a row-level diff, so a round of play sends only the words it actually touched. The sidebar and the Progress tab show whether the last write landed; if it failed, the app says so rather than pretending your work is saved. If you already had progress in this browser from before accounts existed, it is uploaded once on first sign-in.
 
+The schema lives in `supabase/migrations/`, applied in filename order. Note the second file: enabling row-level security and writing policies is not sufficient on its own, because RLS decides *which rows* a request may touch and says nothing about whether the role may touch the table at all. Without the matching `grant`, every call fails with `permission denied for table echo_library`.
+
+The account menu sits in the header on every page — it shows the sync state, offers a retry if a write failed, and signs you out.
+
 Auth is email and password, with a reset-by-email flow. Two notes on the Supabase side: if **Confirm email** is enabled on the project, a new account has to click the confirmation link before it can sign in — the sign-up screen says so. And **leaked password protection** is worth turning on in Auth settings; it is off by default.
 
 ## Play, sort, collect
