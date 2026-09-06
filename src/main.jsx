@@ -2,7 +2,7 @@ import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
-import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,addDay,addStudy,mastery,spelledCount,standing,stage,streak,bestStreak,lastDays,studySeries,MASTERY} from './engine';
+import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,addDay,addStudy,mastery,spelledCount,standing,rankName,stage,streak,bestStreak,lastDays,studySeries,MASTERY} from './engine';
 import {LevelChips,Cues,speak,speakLocal,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud,playFile,hasAudioSession,isApple,voiceMode,setVoiceMode} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
@@ -84,6 +84,59 @@ function StudyLine({series}){
   </div>
   <div className="chart-axis"><span>{series[0].day.slice(5)}</span><span>{series[series.length-1].day.slice(5)}</span></div>
  </div>;
+}
+
+// Half a doughnut per CEFR level, showing how the words you have started there
+// are spread across the review stages. The stages are ordered, so the colour is
+// one hue stepped light to dark rather than five identities, and every number is
+// written out too, because nobody should have to estimate an arc.
+// The ring covers only what you have started: at 18% coverage an untouched slice
+// would swamp it and hide the very thing being asked about, so how much of the
+// level you have reached is a line of text underneath instead.
+const STAGES=[
+ ['learning','Learning','#3f6b53'],
+ ['familiar','Familiar','#529066'],
+ ['strong','Strong','#65b479'],
+ ['locked','Locked in','#7ad38f'],
+ ['known','Known','#9aeab1']
+];
+const polar=(r,deg)=>[50+r*Math.cos(deg*Math.PI/180),50+r*Math.sin(deg*Math.PI/180)];
+function wedge(from,to,R=44,r=27){
+ if(to-from<=0)return '';
+ const big=to-from>180?1:0;
+ const [ax,ay]=polar(R,from),[bx,by]=polar(R,to),[cx,cy]=polar(r,to),[dx,dy]=polar(r,from);
+ return `M${ax},${ay} A${R},${R} 0 ${big} 1 ${bx},${by} L${cx},${cy} A${r},${r} 0 ${big} 0 ${dx},${dy} Z`;
+}
+function StageDial({level,blurb,counts,total}){
+ const [lit,setLit]=useState(null);
+ const met=total-counts.new;
+ let at=180;
+ const arcs=STAGES.map(([key,label,fill])=>{
+  const n=counts[key]||0;
+  const span=met?n/met*180:0;
+  const d=wedge(at,at+span);
+  at+=span;
+  return {key,label,fill,n,d};
+ }).filter(a=>a.d);
+ const shown=lit?STAGES.find(x=>x[0]===lit):null;
+ const said=STAGES.filter(([k])=>counts[k]).map(([k,l])=>`${l} ${counts[k]}`).join(', ');
+ return <figure className="dial">
+  <div className="dial-plot">
+   <svg viewBox="0 0 100 52" role="img" aria-label={`${level}: ${met} of ${total} words started. ${said||'None yet'}.`}>
+    <path d={wedge(180,360)} className="dial-track"/>
+    {arcs.map(a=><path key={a.key} d={a.d} fill={a.fill} className="wedge" tabIndex={0}
+     onPointerEnter={()=>setLit(a.key)} onPointerLeave={()=>setLit(null)}
+     onFocus={()=>setLit(a.key)} onBlur={()=>setLit(null)}><title>{a.label}: {a.n}</title></path>)}
+   </svg>
+   <div className="dial-mid"><strong>{level}</strong></div>
+  </div>
+  <figcaption>
+   <b>{shown?shown[1]:blurb}</b>
+   <span>{shown?`${(counts[shown[0]]||0).toLocaleString()} of ${met.toLocaleString()}`
+    :met?`${met.toLocaleString()} of ${total.toLocaleString()} started`
+    :`none of ${total.toLocaleString()} started`}</span>
+  </figcaption>
+ </figure>;
 }
 
 function App({session}){
@@ -183,6 +236,12 @@ function App({session}){
  const rank=useMemo(()=>standing(state.points),[state.points]);
  const install=useInstall();
  const dayline=useMemo(()=>studySeries(state.days,state.daily,30),[state.days,state.daily]);
+ const byLevel=useMemo(()=>levels.map(l=>{
+  const counts={new:0,learning:0,familiar:0,strong:0,locked:0,known:0};
+  let total=0;
+  for(const w of words)if(w.level===l){total++;counts[stage(state.cards[w.id],state.known[w.id]).key]++}
+  return {level:l,blurb:levelBlurb[l],counts,total};
+ }),[state.cards,state.known]);
  const matches=list=>list.filter(x=>(x.word+' '+x.meaning).toLowerCase().includes(query.toLowerCase()));
  const introduced=pool.filter(x=>state.cards[x.id]||state.known[x.id]).length;
  const shared={words,state,setState,picked,setPicked,notice:setNotice,openWord};
@@ -266,8 +325,9 @@ function App({session}){
  <div className="level-card">
   <div className="level-n"><small>LEVEL</small><strong>{rank.level}</strong></div>
   <div className="level-bar">
+   <b className="rank-name">{rankName(rank.level)}</b>
    <div className="progress-track"><i style={{width:rank.pct+'%'}}/></div>
-   <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} points · {rank.toNext.toLocaleString()} to level {rank.level+1}</small>
+   <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} points · {rank.toNext.toLocaleString()} to {rankName(rank.level+1)}</small>
   </div>
   <p className="subtle">A clean answer earns 100–300 points depending on your run, a near miss half of
    that, and a miss costs 75. Points fall as well as rise, so a bad stretch takes the level back down.
@@ -289,11 +349,12 @@ function App({session}){
  <div className="summary-actions">
   <button className="primary" disabled={!due.length} onClick={()=>toPlay('review')}>Play due words <ArrowRight size={18}/></button>
   <button className="ghost-btn" onClick={()=>setState(s=>({...s,sound:!s.sound}))}>Game sound: {state.sound?'on':'off'}</button></div>
- <div className="level-progress">{levels.map(l=>{
-  const total=words.filter(x=>x.level===l).length;
-  const count=words.filter(x=>x.level===l&&(state.lib[x.id]||state.known[x.id])).length;
-  return <article key={l}><strong>{l}</strong><em>{levelBlurb[l]}</em><div className="progress-track"><i style={{width:count/total*100+'%'}}/></div>
-   <span>{count.toLocaleString()} / {total.toLocaleString()}</span></article>})}</div>
+ <h2 className="section-head">Where each level stands</h2>
+ <div className="dial-legend">{STAGES.map(([k,label,fill])=>
+  <span key={k}><i style={{background:fill}}/>{label}</span>)}</div>
+ <p className="subtle dial-note">Each ring covers the words you have started at that level; the line
+  under it says how much of the level that is.</p>
+ <div className="dial-grid">{byLevel.map(d=><StageDial key={d.level} {...d}/>)}</div>
  <InstallPanel {...install}/>
  <section className="account"><h3>Sound check</h3>
   <p>Three different pipelines carry sound, and iOS can mute them independently.

@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,standing,levelAt,pointsFor,STEP,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,addStudy,studySeries,lastDays,dayKey} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,standing,levelAt,pointsFor,rankName,RANKS,STEP,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,addStudy,studySeries,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -388,4 +388,16 @@ test('daily counts survive a save, and rubbish in them does not',()=>{
  assert.deepEqual(migrate(null).daily,{});
  assert.equal(validate({version:2,daily:[]},words),null,'an array is not a count map');
  assert.deepEqual(validate({version:2,daily:{'2026-09-06':5}},words).daily,{'2026-09-06':5});
+});
+
+test('every level has a name, and the ladder never runs out',()=>{
+ assert.equal(rankName(1),'Doorstep');
+ assert.equal(rankName(7),'Atrium');
+ assert.equal(rankName(RANKS.length),RANKS[RANKS.length-1]);
+ assert.equal(rankName(RANKS.length+1),RANKS[0]+' · wing 2');
+ assert.equal(rankName(RANKS.length*2+1),RANKS[0]+' · wing 3');
+ assert.equal(rankName(0),'Doorstep','a level below one still reads');
+ assert.equal(rankName(undefined),'Doorstep');
+ for(let l=1;l<=200;l++)assert.ok(rankName(l).length>2,'no name at '+l);
+ assert.equal(new Set(RANKS).size,RANKS.length,'the rooms are all different');
 });

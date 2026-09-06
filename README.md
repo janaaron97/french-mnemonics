@@ -110,6 +110,12 @@ The worker caches by request kind rather than by URL list: navigation is **netwo
 
 That makes the app genuinely usable offline. The whole corpus is bundled, the game runs in the browser, and progress is written locally before it syncs, so a round plays on a plane; only cloud sync and AI writing need a connection, and both say so when they cannot reach one.
 
+### Where each level stands
+
+A half-doughnut per CEFR level, showing how the words you have started there are spread across the review stages. The stages are ordered, so the colour is **one hue stepped light to dark** rather than five identities — a sequential ramp, checked against the dark card surface with the palette validator rather than by eye, and every number is written out as well, since nobody should have to estimate an arc.
+
+The ring deliberately covers only what you have **started**. Drawn over the level's full word count it was useless: at 18% coverage the untouched slice swamped the ring and hid the very thing being asked about. How much of the level you have reached is a line of text underneath instead, which is the part a number tells better than an arc.
+
 ### Words studied per day
 
 The Progress page opens with a 30-day line of how many words you studied each day. A word counts **once a day** however many times it comes round, which needs no per-day set of ids: the card's own last-seen stamp already says whether today has been counted for it.
@@ -122,7 +128,7 @@ The svg is stretched to the card's width, which would squash anything that is no
 
 The headline number is a **level**, not a running total, because points fall as well as rise. A clean answer earns 100 points plus 25 for each answer in the current run, capped at 300; a near miss earns half that; a miss **costs 75** and resets the run, so the next clean answer earns at the bottom of the scale again. Using the bonus word in a written sentence adds 75. The total floors at zero.
 
-Reaching level *n+1* costs `250n`, so level 2 sits at 250 points, level 5 at 2,500, level 10 at 11,250 and level 20 at 47,500 — early levels come quickly, later ones ask for a sustained stretch rather than one lucky round. Because a bad run costs more than it earns, a level goes back down; the round summary says which way it moved and why. The level is computed from the total by closed form and then corrected by a step in each direction, so floating point never decides a boundary — a test walks all 500 of them.
+Each level is a room of the palace, climbing from the Doorstep to the Lantern room and then starting again a wing higher, so the ladder never runs out. Reaching level *n+1* costs `250n`, so level 2 sits at 250 points, level 5 at 2,500, level 10 at 11,250 and level 20 at 47,500 — early levels come quickly, later ones ask for a sustained stretch rather than one lucky round. Because a bad run costs more than it earns, a level goes back down; the round summary says which way it moved and why. The level is computed from the total by closed form and then corrected by a step in each direction, so floating point never decides a boundary — a test walks all 500 of them.
 
 Nothing on the word page earns points: they come from rounds.
 

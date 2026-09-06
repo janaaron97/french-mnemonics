@@ -384,6 +384,18 @@ export function queue({words,mode='discover',progress,now=Date.now(),size=10}){
 // Reaching level n+1 costs STEP*n, so early levels come quickly and later ones
 // ask for sustained clean work rather than one lucky round.
 export const STEP=250;
+// A level is a room of the palace you have opened, climbing from the doorstep to
+// the lantern at the top. Past the last one the climb starts again a wing higher,
+// so the ladder never runs out.
+export const RANKS=['Doorstep','Threshold','Vestibule','Waiting room','Cloakroom','Corridor',
+ 'Atrium','Courtyard','Reading room','Library','Café','Walled garden','Conservatory','Music room',
+ 'Theatre','Gallery','Great hall','Ballroom','Stairwell','Clock tower','Belfry','Observatory',
+ 'Roof garden','Lantern room'];
+export function rankName(level){
+ const n=Math.max(1,Math.floor(level||1))-1;
+ const wing=Math.floor(n/RANKS.length);
+ return RANKS[n%RANKS.length]+(wing?` · wing ${wing+1}`:'');
+}
 export const pointsFor=level=>STEP*level*(level-1)/2;
 export function levelAt(points){
  const p=Math.max(0,Math.floor(points||0));

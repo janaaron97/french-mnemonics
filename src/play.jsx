@@ -1,6 +1,6 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
 import {X,ArrowRight,Check,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift,TrendingUp,TrendingDown} from 'lucide-react';
-import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,addStudy,mastery,spelledCount,standing,streak as dayStreak,MASTERY,posOf} from './engine';
+import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,addStudy,mastery,spelledCount,standing,rankName,streak as dayStreak,MASTERY,posOf} from './engine';
 import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor,composeFor} from './generate.js';
 
@@ -345,8 +345,9 @@ function Setup({counts,size,setSize,start,state}){
    <div className="level-badge">
     <div className="level-n"><small>LEVEL</small><strong>{rank.level}</strong></div>
     <div className="level-bar">
+     <b className="rank-name">{rankName(rank.level)}</b>
      <div className="progress-track"><i style={{width:rank.pct+'%'}}/></div>
-     <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} to level {rank.level+1}</small>
+     <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} to {rankName(rank.level+1)}</small>
     </div>
    </div>
    <div className="pills">
