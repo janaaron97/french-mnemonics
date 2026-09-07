@@ -853,3 +853,38 @@ footer{color:var(--dim)}
  .dial-mid strong{font-size:17px}
  .rank-name{font-size:15px}
 }
+
+/* --- the climb: every room, with the spine that makes it one ascent --- */
+.ladder{list-style:none;margin:0 0 22px;padding:0;position:relative}
+.ladder li{display:grid;grid-template-columns:20px 26px 1fr;align-items:center;gap:10px;
+ padding:7px 0;position:relative}
+.rung{grid-column:1;justify-self:center;position:relative;align-self:stretch;display:flex;
+ align-items:center;justify-content:center}
+/* the spine is drawn by the rung, so it stops cleanly at the first and last row */
+.rung::before{content:'';position:absolute;top:-8px;bottom:-8px;width:2px;background:var(--line)}
+.ladder li:first-child .rung::before{top:50%}
+.ladder li:last-child .rung::before{bottom:50%}
+.rung i{width:9px;height:9px;border-radius:50%;background:var(--line);position:relative;z-index:1;
+ box-shadow:0 0 0 3px var(--bg)}
+.ladder li.done .rung::before,.ladder li.here .rung::before{background:var(--green-deep)}
+.ladder li.done .rung i{background:var(--green-deep)}
+.ladder li.here .rung i{width:12px;height:12px;background:var(--green);box-shadow:0 0 0 3px var(--bg),0 0 12px #5cd67066}
+.rung-n{font-family:Manrope,sans-serif;font-size:12px;font-weight:700;color:var(--dim);
+ text-align:right;font-variant-numeric:tabular-nums}
+.ladder li.here .rung-n{color:var(--green)}
+.rung-body{display:grid;gap:3px;min-width:0}
+.rung-body b{font-family:Georgia,serif;font-size:15px;font-weight:400;color:var(--muted)}
+.ladder li.done .rung-body b{color:var(--text)}
+.ladder li.here .rung-body b{color:var(--text);font-size:19px}
+.rung-body small{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.rung-track{height:5px;border-radius:5px;background:var(--raise);overflow:hidden;max-width:320px}
+.rung-track i{display:block;height:100%;background:var(--green);border-radius:5px}
+.ladder li.more .rung-body{padding:2px 0}
+.ladder .link{font-size:12px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;
+ justify-self:start;padding:0}
+.ladder .link:hover{color:var(--text)}
+.sources > .account,.sources > section{margin-top:16px}
+@media(max-width:650px){
+ .ladder li{grid-template-columns:18px 22px 1fr;gap:8px}
+ .ladder li.here .rung-body b{font-size:17px}
+}

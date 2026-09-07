@@ -114,7 +114,11 @@ That makes the app genuinely usable offline. The whole corpus is bundled, the ga
 
 A half-doughnut per CEFR level, showing how the words you have started there are spread across the review stages. The stages are ordered, so the colour is **one hue stepped light to dark** rather than five identities — a sequential ramp, checked against the dark card surface with the palette validator rather than by eye, and every number is written out as well, since nobody should have to estimate an arc.
 
-The ring deliberately covers only what you have **started**. Drawn over the level's full word count it was useless: at 18% coverage the untouched slice swamped the ring and hid the very thing being asked about. How much of the level you have reached is a line of text underneath instead, which is the part a number tells better than an arc.
+The ring covers the **whole** level, unstarted words included, so it reads as how far through that level you are. Early on the started stages are a thin sliver by definition — the hover, the legend, and the started-of-total line underneath carry what the arc cannot.
+
+**The climb** lists every room below it: the ones behind you, the one you are in with its fill and what is left to go, and the ones ahead with what they cost. It opens at five rooms past where you stand and expands to the whole ladder. The spine down the left is what makes it read as one ascent rather than a list of unrelated rows, so it bridges the row padding rather than restarting at each one.
+
+Everything on Progress that only matters when something is broken — installing, the sound tests, the account row — sits in a collapsed **Diagnostics** block at the bottom. It is out of the way rather than gone: the last few faults in this app were only ever found by reading those numbers.
 
 ### Words studied per day
 

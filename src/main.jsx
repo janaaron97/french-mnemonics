@@ -2,7 +2,7 @@ import React,{useState,useEffect,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Volume2,ArrowRight,Search,Layers,Layers2,Library as LibraryIcon,Gamepad2,ChartNoAxesColumnIncreasing,Check,Plus,Download,Upload,X,Sparkles,LogOut,CloudOff,RefreshCw,Menu} from 'lucide-react';
 import words from './words.json';
-import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,addDay,addStudy,mastery,spelledCount,standing,rankName,stage,streak,bestStreak,lastDays,studySeries,MASTERY} from './engine';
+import {sounds,chunks,levels,levelBlurb,migrate,validate,posOf,empty,applyGrade,addDay,addStudy,mastery,spelledCount,standing,rankName,RANKS,pointsFor,stage,streak,bestStreak,lastDays,studySeries,MASTERY} from './engine';
 import {LevelChips,Cues,speak,speakLocal,useSoundUnlock,unlockSound,tone,soundReport,isLoud,setLoud,playFile,hasAudioSession,isApple,voiceMode,setVoiceMode} from './ui';
 import Play from './play.jsx';
 import Sort from './sort.jsx';
@@ -90,15 +90,17 @@ function StudyLine({series}){
 // are spread across the review stages. The stages are ordered, so the colour is
 // one hue stepped light to dark rather than five identities, and every number is
 // written out too, because nobody should have to estimate an arc.
-// The ring covers only what you have started: at 18% coverage an untouched slice
-// would swamp it and hide the very thing being asked about, so how much of the
-// level you have reached is a line of text underneath instead.
+// The ring covers the whole level, unstarted words included, so it reads as how
+// far through that level you are. Early on the started stages are a thin sliver
+// by definition — the hover, the legend and the line underneath carry the detail
+// the arc cannot.
 const STAGES=[
  ['learning','Learning','#3f6b53'],
  ['familiar','Familiar','#529066'],
  ['strong','Strong','#65b479'],
  ['locked','Locked in','#7ad38f'],
- ['known','Known','#9aeab1']
+ ['known','Known','#9aeab1'],
+ ['new','Not started','#2c302e']
 ];
 const polar=(r,deg)=>[50+r*Math.cos(deg*Math.PI/180),50+r*Math.sin(deg*Math.PI/180)];
 function wedge(from,to,R=44,r=27){
@@ -113,7 +115,7 @@ function StageDial({level,blurb,counts,total}){
  let at=180;
  const arcs=STAGES.map(([key,label,fill])=>{
   const n=counts[key]||0;
-  const span=met?n/met*180:0;
+  const span=total?n/total*180:0;
   const d=wedge(at,at+span);
   at+=span;
   return {key,label,fill,n,d};
@@ -132,11 +134,39 @@ function StageDial({level,blurb,counts,total}){
   </div>
   <figcaption>
    <b>{shown?shown[1]:blurb}</b>
-   <span>{shown?`${(counts[shown[0]]||0).toLocaleString()} of ${met.toLocaleString()}`
+   <span>{shown?`${(counts[shown[0]]||0).toLocaleString()} of ${total.toLocaleString()}`
     :met?`${met.toLocaleString()} of ${total.toLocaleString()} started`
     :`none of ${total.toLocaleString()} started`}</span>
   </figcaption>
  </figure>;
+}
+
+// The whole climb in one column: rooms behind you, the one you are in with its
+// fill, and the ones ahead with what they cost. The spine on the left is what
+// makes it read as a single ascent rather than a list of unrelated rows.
+function Ladder({rank}){
+ const [all,setAll]=useState(false);
+ const top=all?RANKS.length:Math.min(RANKS.length,rank.level+5);
+ const rows=[];
+ for(let l=1;l<=top;l++)rows.push(l);
+ return <ol className="ladder">{rows.map(l=>{
+  const here=l===rank.level,done=l<rank.level;
+  return <li key={l} className={here?'here':done?'done':'ahead'}>
+   <span className="rung"><i/></span>
+   <span className="rung-n">{l}</span>
+   <span className="rung-body">
+    <b>{rankName(l)}</b>
+    {here
+     ?<><span className="rung-track"><i style={{width:rank.pct+'%'}}/></span>
+       <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} · {rank.toNext.toLocaleString()} to go</small></>
+     :<small>{done?'passed':`${pointsFor(l).toLocaleString()} points`}</small>}
+   </span>
+  </li>;
+ }).concat(top<RANKS.length?[
+  <li key="more" className="ahead more"><span className="rung"><i/></span><span className="rung-n">⋯</span>
+   <span className="rung-body"><button className="link" onClick={()=>setAll(true)}>
+    Show the rest of the climb — {RANKS.length-top} more rooms</button></span></li>
+ ]:[])}</ol>;
 }
 
 function App({session}){
@@ -329,9 +359,6 @@ function App({session}){
    <div className="progress-track"><i style={{width:rank.pct+'%'}}/></div>
    <small>{rank.into.toLocaleString()} / {rank.need.toLocaleString()} points · {rank.toNext.toLocaleString()} to {rankName(rank.level+1)}</small>
   </div>
-  <p className="subtle">A clean answer earns 100–300 points depending on your run, a near miss half of
-   that, and a miss costs 75. Points fall as well as rise, so a bad stretch takes the level back down.
-   Level {rank.level+1} sits at {(rank.points+rank.toNext).toLocaleString()} points in total.</p>
  </div>
  <StudyLine series={dayline}/>
  <div className="streak-card">
@@ -352,9 +379,20 @@ function App({session}){
  <h2 className="section-head">Where each level stands</h2>
  <div className="dial-legend">{STAGES.map(([k,label,fill])=>
   <span key={k}><i style={{background:fill}}/>{label}</span>)}</div>
- <p className="subtle dial-note">Each ring covers the words you have started at that level; the line
-  under it says how much of the level that is.</p>
+ <p className="subtle dial-note">Each ring is a whole CEFR level. Hover a slice for its count.</p>
  <div className="dial-grid">{byLevel.map(d=><StageDial key={d.level} {...d}/>)}</div>
+
+ <h2 className="section-head">The climb</h2>
+ <p className="subtle dial-note">A clean answer earns 100–300 points depending on your run, a near miss
+  half of that, and a miss costs 75 — so a bad stretch takes you back down a room.</p>
+ <Ladder rank={rank}/>
+
+ <section className="backup"><h3>Backup</h3>
+  <p>Everything syncs to your account. An export is still worth keeping offline; importing replaces your progress and syncs the result up.</p>
+  <button onClick={exportData}><Download size={17}/> Export progress</button>
+  <label className="import"><Upload size={17}/> Restore backup<input type="file" accept="application/json" onChange={importData}/></label></section>
+
+ <details className="sources"><summary>Diagnostics — installing, sound, account</summary>
  <InstallPanel {...install}/>
  <section className="account"><h3>Sound check</h3>
   <p>Three different pipelines carry sound, and iOS can mute them independently.
@@ -385,19 +423,11 @@ function App({session}){
   </div>
   {check&&<dl className="report">{Object.entries(check).map(([k,v])=>
    <React.Fragment key={k}><dt>{k}</dt><dd>{String(v)}</dd></React.Fragment>)}</dl>}
-  <p><b>last started: no</b> with <b>last error: none</b> means the utterance was accepted and never
-   began — that is the phone muting it, not the app. An error of <i>not-allowed</i> means Safari refused
-   it for want of a gesture, and <i>interrupted</i> or <i>canceled</i> means something cut it off.</p>
-  <p>Test 3 is Safari's own speech, which runs on an audio session this page cannot set: with the ringer
-   switch off it starts, reports nothing wrong, and is silent anyway. Test 4 plays generated French through
-   a media element, which does obey the page's playback session — that is the one that should be audible
-   with the ringer off. Each word is fetched once and then kept on the device, so it costs nothing to
-   repeat and works offline afterwards.</p>
-  {isApple()&&<p>{hasAudioSession()
-   ?'This Safari supports audioSession, so the page asks for a playback session directly and no silent-switch hum is used.'
-   :'This Safari is too old for audioSession, so a near-silent looping track is used instead to escape the ringer switch. It holds the output open, which can itself block speech — if test 3 stays silent while 1 and 2 work, turn the hum off and try again.'}</p>}
+  <p>Test 3 is Safari's own speech, on an audio session this page cannot set: with the ringer switch off
+   it starts, reports nothing wrong, and is silent anyway. Test 4 plays generated French through a media
+   element, which does obey the page's playback session, and is what the app uses.</p>
  </section>
- <section className="account"><h3>Your account.</h3>
+ <section className="account"><h3>Your account</h3>
   <div className="account-row"><strong>{session.user.email}</strong>
    <span className={'sync-pill '+sync}>{sync==='error'?<><CloudOff size={13}/> not syncing</>
     :sync==='saving'?<><RefreshCw size={13} className="spin"/> saving</>
@@ -406,10 +436,8 @@ function App({session}){
    {sync==='error'&&<button className="ghost-btn" onClick={retry}><RefreshCw size={15}/> Try again</button>}
    <button className="ghost-btn" onClick={()=>supabase.auth.signOut()}><LogOut size={15}/> Sign out</button></div>
  </section>
- <section className="backup"><h3>Backup</h3>
-  <p>Everything syncs to your account. An export is still worth keeping offline; importing replaces your progress and syncs the result up.</p>
-  <button onClick={exportData}><Download size={17}/> Export progress</button>
-  <label className="import"><Upload size={17}/> Restore backup<input type="file" accept="application/json" onChange={importData}/></label></section>
+ </details>
+
  <details className="sources"><summary>About the vocabulary & sources</summary>
   <p>5,500 unique entries matched to IPA pronunciations. Translations, sentences, and CEFR estimates come from the AI-assisted <a href="https://github.com/vbvss199/Language-Learning-decks">Language-Learning-decks</a> dataset (MIT). Levels are estimates, not an official CEFR syllabus; vocabulary alone does not establish C1 proficiency. Content can contain errors. Pronunciations come from <a href="https://github.com/open-dict-data/ipa-dict">ipa-dict</a> (MIT); only the first listed pronunciation is used. Mnemonic scenes are generated templates, editable by you. Sentence words are matched back to entries with a rule-based inflection table, so an occasional word is missed or attached to a look-alike lemma.</p>
   <p><a href="/licenses/LICENSE">Vocabulary license</a> · <a href="/licenses/IPA-LICENSE">IPA license</a> · <a href="/licenses/attributions.md">Frequency data attribution (CC BY-SA)</a></p></details></>}
