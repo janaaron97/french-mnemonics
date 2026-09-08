@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import words from '../src/words.json' with {type:'json'};
-import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,standing,levelAt,pointsFor,rankName,RANKS,STEP,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,addStudy,studySeries,lastDays,dayKey} from '../src/engine.js';
+import {tokenize,schedule,scene,sentenceIds,formIndex,blank,card,check,checkMeaning,meanings,define,lookup,basics,WORD_RE,queue,migrate,validate,levels,applyGrade,ladder,weave,mastery,spelledCount,standing,levelAt,pointsFor,rankName,RANKS,STEP,stage,seen,MASTERY,empty,SCENES,alternates,streak,bestStreak,addDay,addStudy,studySeries,lastDays,dayKey} from '../src/engine.js';
 test('5,500 unique complete entries span A1 to C1',()=>{assert.equal(words.length,5500);assert.equal(new Set(words.map(w=>w.word)).size,5500);for(const w of words){for(const key of ['word','ipa','meaning','example','translation','level'])assert.ok(w[key],`${w.id} ${key}`);assert.ok(!['le','la','les'].includes(w.article))}assert.equal(new Set(words.map(w=>w.level)).size,5)});
 test('every pronunciation has complete mnemonic coverage',()=>{for(const w of words)assert.ok(tokenize(w.ipa).every(s=>s.type!=='unknown'),w.word+' '+w.ipa)});
 test('nasals and recurring chunks use longest matches',()=>{assert.deepEqual(tokenize('ʃɑ̃').map(s=>s.name),['Chef','Atrium']);assert.equal(tokenize('sjɔ̃')[0].name,'Transformation machine');assert.deepEqual(tokenize('ʼɥit').map(s=>s.ipa),['ɥ','i','t']);assert.equal(tokenize('sjɔ̃',false).length,3)});
@@ -424,4 +424,41 @@ test('mastery falls on a miss, but only where the round asked you to write it',(
  for(let i=0;i<MASTERY;i++)full=schedule(full,'good',0);
  assert.equal(mastery(full),MASTERY);
  assert.equal(mastery(schedule(full,'again',0)),MASTERY-1);
+});
+
+test('a tapped word resolves to the corpus, or to the built-in grammar glosses',()=>{
+ const say=t=>define(t,words).map(d=>d.word+(d.entry?'':' [basic]'));
+ assert.deepEqual(say('suis'),['être'],'an inflected form finds its headword');
+ assert.deepEqual(say('Étudiant'),['étudiant'],'case does not matter');
+ // an elision gives back both halves, wherever each one is known from
+ assert.deepEqual(say('j’ai'),['je [basic]','avoir']);
+ assert.deepEqual(say("qu'il"),['que [basic]','il [basic]']);
+ assert.deepEqual(say('l’école'),['le [basic]','école']);
+ assert.deepEqual(say('peut-être'),['pouvoir','être'],'a hyphen splits the same way');
+ assert.deepEqual(say('xyzzy'),[],'an unknown word offers nothing rather than guessing');
+ assert.deepEqual(say(''),[]);
+ assert.deepEqual(say(null),[]);
+ // the glossary exists because the corpus leaves the grammar out
+ for(const w of ['je','que','des','sur','ne'])
+  assert.ok(basics[w],'no gloss for '+w);
+ for(const w of Object.keys(basics))
+  assert.ok(define(w,words).length,'a gloss that resolves to nothing: '+w);
+});
+test('the word pattern keeps elisions and hyphens whole, and punctuation out',()=>{
+ const grab=t=>String(t).match(new RegExp(WORD_RE.source,'gu'))||[];
+ assert.deepEqual(grab('Je ne sais pas.'),['Je','ne','sais','pas']);
+ assert.deepEqual(grab('Qu’est-ce que c’est ?'),['Qu’est-ce','que','c’est']);
+ assert.deepEqual(grab('« Ah… oui ! »'),['Ah','oui']);
+ assert.deepEqual(grab(''),[]);
+});
+test('every corpus sentence is fully tappable, or knowingly not',()=>{
+ // how much of a real sentence a tap can actually explain
+ let words_seen=0,resolved=0;
+ for(const w of words.slice(0,600))
+  for(const t of w.example.match(new RegExp(WORD_RE.source,'gu'))||[]){
+   words_seen++;
+   if(define(t,words).length)resolved++;
+  }
+ const share=resolved/words_seen;
+ assert.ok(share>0.9,'only '+(share*100).toFixed(1)+'% of sentence words resolve');
 });

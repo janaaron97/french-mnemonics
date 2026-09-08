@@ -1,6 +1,7 @@
 import React,{useState,useMemo,useRef,useEffect} from 'react';
-import {X,ArrowRight,Check,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift,TrendingUp,TrendingDown} from 'lucide-react';
-import {queue,card,check,checkMeaning,sentenceIds,applyGrade,addDay,addStudy,mastery,spelledCount,standing,rankName,streak as dayStreak,MASTERY,posOf} from './engine';
+import {createPortal} from 'react-dom';
+import {X,ArrowRight,Check,Flame,Volume2,Sparkles,Layers,Compass,History,Trophy,RotateCcw,Ear,HelpCircle,GraduationCap,Target,Clock,Loader2,BookOpen,ChevronRight,Languages,PenLine,Gift,TrendingUp,TrendingDown,Plus} from 'lucide-react';
+import {queue,card,check,checkMeaning,sentenceIds,define,WORD_RE,stage,applyGrade,addDay,addStudy,mastery,spelledCount,standing,rankName,streak as dayStreak,MASTERY,posOf} from './engine';
 import {Cues,speak,tone,buzz,useKeys,useVisualViewport,Counter} from './ui';
 import {explainFor,composeFor} from './generate.js';
 
@@ -22,8 +23,58 @@ const BONUS=75;
 const points=streak=>100+Math.min(streak,8)*25;
 const MISS=-75;
 const signed=n=>(n>0?'+':'')+n.toLocaleString();
-const words_=text=>String(text).split(/(\s+)/).map((part,i)=>
- /^\s+$/.test(part)||!part?part:<span className="tok" key={i}>{part}</span>);
+// Every word in a French sentence is tappable: the corpus knows most of them and
+// a small built-in glossary covers the grammar it leaves out. Punctuation and
+// spacing stay outside the button, so the sentence still reads as a sentence.
+function Tappable({text,words,onPick}){
+ const src=String(text??'');
+ const out=[];
+ let at=0,k=0;
+ for(const m of src.matchAll(WORD_RE)){
+  if(m.index>at)out.push(src.slice(at,m.index));
+  const found=define(m[0],words);
+  out.push(found.length
+   ?<button type="button" className="tok" key={k++} onClick={e=>{e.stopPropagation();onPick(found,m[0])}}>{m[0]}</button>
+   :<span className="tok mute" key={k++}>{m[0]}</span>);
+  at=m.index+m[0].length;
+ }
+ if(at<src.length)out.push(src.slice(at));
+ return <>{out}</>;
+}
+
+// A sheet rather than a bubble anchored to the word: it never runs off the edge
+// of a phone, and the arena is already a fixed full-screen layout.
+function Gloss({found,token,onClose,notice,state,setState}){
+ if(!found)return null;
+ // Through a portal: inside the arena it would sit in that stacking context and
+ // the answer bar would paint over it.
+ return createPortal(<div className="gloss-wrap" onPointerDown={onClose}>
+  <div className="gloss" onPointerDown={e=>e.stopPropagation()} role="dialog" aria-label={'What “'+token+'” means'}>
+   {found.map((w,i)=>{
+    const step=w.entry?stage(state.cards[w.id],state.known[w.id]):null;
+    const held=w.entry&&(state.lib[w.id]||state.known[w.id]);
+    return <div className="gloss-row" key={i}>
+     <div className="gloss-head">
+      <strong lang="fr">{w.article||w.word}</strong>
+      {w.ipa&&<i>/{w.ipa}/</i>}
+      <button type="button" className="say" onClick={()=>speak(w.word,notice)} aria-label="Hear it"><Volume2 size={16}/></button>
+     </div>
+     <p>{w.meaning}</p>
+     <div className="gloss-tags">
+      {w.entry
+       ?<><span className="chip">{w.level}</span><span className="chip">{posOf(w)}</span>
+         {step&&<span className="chip">{step.label}</span>}
+         {!held&&<button type="button" className="chip add"
+           onClick={()=>{setState(st=>({...st,lib:{...st.lib,[w.id]:Date.now()}}));notice(`“${w.word}” added to your library.`)}}>
+           <Plus size={12}/> add</button>}</>
+       :<span className="chip">grammar — not a study word</span>}
+     </div>
+    </div>;
+   })}
+   <button type="button" className="gloss-x" onClick={onClose} aria-label="Close"><X size={18}/></button>
+  </div>
+ </div>,document.body);
+}
 function Blank({c,draft,setDraft,field,result,tone3,teaching,submit}){
  // An English meaning can be a whole phrase, so it gets a field that wraps —
  // otherwise TEACH ME shows the first half of the answer and hides the rest.
@@ -73,7 +124,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   setStage('done');
  };
  const next=()=>{
-  clearTimeout(timer.current);setHint(false);setDraft('');setShown(0);setTeaching(false);
+  clearTimeout(timer.current);setHint(false);setDraft('');setShown(0);setTeaching(false);setGloss(null);
   const v=live.current;
   if(!v)return;
   if(v.i+1>=v.deck.length)return finish(v);
@@ -155,6 +206,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   return()=>clearTimeout(id);
  },[stage,s?.i]);
  const [explaining,setExplaining]=useState(0);
+ const [gloss,setGloss]=useState(null);
  const explain=async word=>{
   if(explaining)return;
   setExplaining(word.id);
@@ -189,7 +241,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
 
  useKeys(e=>{
   if(stage!=='play')return;
-  if(e.key==='Escape')return quit();
+  if(e.key==='Escape')return gloss?setGloss(null):quit();
   if(e.key==='Enter'&&live.current?.result){e.preventDefault();next()}
  });
  useEffect(()=>{if(launch){onLaunched();start(launch)}},[launch]);
@@ -197,7 +249,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  useVisualViewport();
 
  if(stage==='setup')return <Setup {...{counts,size,setSize,start,state}}/>;
- if(stage==='done')return <Summary {...{s,setStage,start,setState,state,openWord,notice,explain,explaining}}/>;
+ if(stage==='done')return <Summary {...{s,setStage,start,setState,state,words,openWord,notice,explain,explaining}}/>;
 
  const c=s.deck[s.i],result=s.result,ok=result&&s.outcome!=='missed';
  const spellable=c.kind==='cloze'||c.kind==='recall';
@@ -205,6 +257,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
  const filled=result?c.answer:draft;
  const tone3=result?(s.outcome==='clean'?'right':s.outcome==='close'?'close':'wrong'):'gap';
  return <div className={'arena'+(result?ok?' win':' fail':'')}>
+  <Gloss found={gloss?.found} token={gloss?.token} onClose={()=>setGloss(null)} {...{notice,state,setState}}/>
   <div className="arena-hud">
    <button className="hud-quit" onClick={quit} aria-label="Leave this round"><X size={20}/></button>
    <div className="pips">{s.deck.map((_,i)=><i key={i} className={i<s.i?'done':i===s.i?'now':''}/>)}</div>
@@ -217,7 +270,10 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   <form className="arena-body" onSubmit={submit} key={c.id}>
    <div className="arena-stage">
    {c.kind==='cloze'
-    ? <p className="prompt" lang="fr">{words_(c.before)}<Blank {...{c,draft,setDraft,field,result,tone3,teaching}}/>{words_(c.after)}</p>
+    ? <p className="prompt" lang="fr">
+       <Tappable text={c.before} words={words} onPick={(f,t)=>setGloss({found:f,token:t})}/>
+       <Blank {...{c,draft,setDraft,field,result,tone3,teaching}}/>
+       <Tappable text={c.after} words={words} onPick={(f,t)=>setGloss({found:f,token:t})}/></p>
     : c.kind==='meaning'
     ? <div className="prompt-recall">
        <span className="arena-eyebrow">WHAT DOES THIS MEAN</span>
@@ -276,12 +332,12 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
     {s.review.notes&&<div className="breakdown">{s.review.notes}</div>}
     {s.review.corrected&&<div className="mark-fix">
      <span className="arena-eyebrow">{s.review.corrected.trim()===s.typed.trim()?'AS YOU WROTE IT':'CORRECTED'}</span>
-     <p lang="fr">{s.review.corrected}
+     <p lang="fr"><Tappable text={s.review.corrected} words={words} onPick={(f,t)=>setGloss({found:f,token:t})}/>
       <button type="button" className="say" onClick={()=>speak(s.review.corrected,notice)} aria-label="Hear it"><Volume2 size={16}/></button></p>
      {s.review.english&&<em>{s.review.english}</em>}</div>}
     {!!s.review.better?.length&&<div className="mark-fix">
      <span className="arena-eyebrow">OTHER WAYS TO SAY IT</span>
-     {s.review.better.map((b,i)=><p key={i} lang="fr">{b}
+     {s.review.better.map((b,i)=><p key={i} lang="fr"><Tappable text={b} words={words} onPick={(f,t)=>setGloss({found:f,token:t})}/>
       <button type="button" className="say" onClick={()=>speak(b,notice)} aria-label="Hear it"><Volume2 size={16}/></button></p>)}</div>}
     {s.mastered
      ?<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>
@@ -378,16 +434,17 @@ function Setup({counts,size,setSize,start,state}){
  </div>;
 }
 
-function Summary({s,setStage,start,setState,state,openWord,notice,explain,explaining}){
+function Summary({s,setStage,start,setState,state,words,openWord,notice,explain,explaining}){
  const acc=s.answered?Math.round(s.right/s.answered*100):0;
  const secs=Math.max(1,Math.round((Date.now()-(s.startedAt||Date.now()))/1000));
  const clock=`${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`;
  const run=dayStreak(state.days);
  const fresh=s.done.filter(d=>!d.card.word.seenBefore).length;
- const [open,setOpen]=useState(null);
+ const [open,setOpen]=useState(null),[gloss,setGloss]=useState(null);
  const mastered=s.done.filter(d=>state.known[d.card.id]).length;
  const rank=standing(state.points),moved=rank.level-(s.levelAtStart??rank.level);
  return <div className="done-screen">
+  <Gloss found={gloss?.found} token={gloss?.token} onClose={()=>setGloss(null)} {...{notice,state,setState}}/>
   <div className="done-head">
    <button className="hud-quit" onClick={()=>setStage('setup')} aria-label="Close"><X size={20}/></button>
    <h1><Trophy size={24}/> ROUND COMPLETE</h1>
@@ -429,6 +486,9 @@ function Summary({s,setStage,start,setState,state,openWord,notice,explain,explai
        :c.kind==='cloze'?w.translation:w.meaning}</em></span>
      <ArrowRight size={16} className="chev"/>
     </button>
+    {isOpen&&(c.kind==='cloze'||c.kind==='compose')&&<p className="sent-full" lang="fr">
+     <Tappable text={c.kind==='compose'?(typed||''):c.before+c.answer+c.after} words={words}
+      onPick={(f,t)=>setGloss({found:f,token:t})}/></p>}
     {isOpen&&c.kind==='compose'&&review&&<div className="mark-recap">
      {review.notes&&<div className="breakdown">{review.notes}</div>}
      {review.corrected&&<p lang="fr"><b>{review.corrected}</b>

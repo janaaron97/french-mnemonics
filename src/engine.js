@@ -259,6 +259,53 @@ export function formIndex(list){
  indexes.set(list,map);
  return map;
 }
+export const WORD_RE=/\p{L}+(?:['’]\p{L}+)*(?:-\p{L}+)*/gu;
+// One token at a time, by the rules sentenceIds uses on a whole sentence: an
+// elision like "j'ai" resolves to both halves, so a tap can offer both.
+export function lookup(token,list){
+ const map=formIndex(list);
+ const raw=String(token||'').toLowerCase().normalize('NFC');
+ if(!raw)return [];
+ if(map.has(raw))return [map.get(raw)];
+ const parts=raw.split(/['’-]/),ids=[];
+ for(let i=0;i<parts.length;i++){
+  const key=i<parts.length-1&&elided[parts[i]]?elided[parts[i]]:parts[i];
+  const id=map.get(key);
+  if(id&&!ids.includes(id))ids.push(id);
+ }
+ return ids;
+}
+// The corpus is built from content words and leaves out the grammar that holds a
+// sentence together — je, que, des, sur — which is exactly what a learner taps
+// first. These are glosses, not entries: no level, no schedule, nothing to study.
+export const basics=Object.fromEntries(`je=I|tu=you (familiar)|il=he, it|elle=she, it|on=one, we|nous=we|vous=you (plural or formal)|ils=they|elles=they (feminine)
+me=me, to me|moi=me|te=you, to you|toi=you|se=himself, herself, themselves|lui=him, to him or her|leur=to them|y=there, to it|en=of it, some
+le=the, him, it|la=the, her, it|les=the, them|un=a, one|une=a, one|des=some|du=of the, some|de=of, from|au=to the|aux=to the|à=to, at, in
+et=and|ou=or|mais=but|donc=so, therefore|car=because|que=that, which, than|qui=who, which|quoi=what|dont=of which, whose|où=where|si=if, whether
+ne=not (first half of the negative)|rien=nothing|jamais=never|personne=nobody|aucun=none, not any|aucune=none, not any
+ce=this, it|cet=this|cette=this|ces=these|ça=that|cela=that|ceci=this|celui=the one|celle=the one
+mon=my|ma=my|mes=my|ton=your|ta=your|tes=your|son=his, her, its|sa=his, her, its|ses=his, her, its|notre=our|nos=our|votre=your|vos=your|leurs=their
+quand=when|comme=as, like|pour=for, in order to|par=by, through|sur=on|sous=under|dans=in|avec=with|sans=without|chez=at the home of|vers=towards|entre=between
+depuis=since, for|pendant=during|avant=before|après=after|contre=against|jusque=until, as far as|malgré=despite|selon=according to|parmi=among
+oui=yes|non=no|voici=here is|voilà=there is, that is|ici=here|là=there`
+ .split(/[\n|]/).map(l=>l.trim()).filter(Boolean).map(l=>{const [k,v]=l.split('=');return [k,v]}));
+
+// What a tapped word is: corpus entries first, a plain gloss where the corpus is
+// silent, and nothing at all where neither knows it.
+export function define(token,list){
+ const map=formIndex(list);
+ const raw=String(token||'').toLowerCase().normalize('NFC');
+ if(!raw)return [];
+ if(map.has(raw))return [{...list[map.get(raw)-1],entry:true}];
+ const parts=raw.split(/['’-]/),out=[];
+ for(let i=0;i<parts.length;i++){
+  const key=i<parts.length-1&&elided[parts[i]]?elided[parts[i]]:parts[i];
+  const id=map.get(key),w=id&&list[id-1];
+  if(w){if(!out.some(o=>o.word===w.word))out.push({...w,entry:true})}
+  else if(basics[key]&&!out.some(o=>o.word===key))out.push({word:key,meaning:basics[key],entry:false});
+ }
+ return out;
+}
 export function sentenceIds(sentence,list){
  const map=formIndex(list),ids=[];
  for(const raw of String(sentence).toLowerCase().normalize('NFC').match(/\p{L}+(?:['’]\p{L}+)*(?:-\p{L}+)*/gu)||[]){
