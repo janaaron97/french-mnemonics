@@ -91,6 +91,8 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
   // producing the French, so it never moves mastery.
   const spells=c.kind!=='meaning';
   const climbed=outcome==='clean'&&spells&&!state.known[c.id]&&spelledCount(state.cards[c.id])+1>=MASTERY;
+  // a miss in a round that asked you to write it gives a mastery point back
+  const dropped=outcome==='missed'&&spells&&spelledCount(state.cards[c.id])>0;
   // Only the sentence rounds put a sentence in front of you, so only they have
   // words worth harvesting out of it.
   const ids=c.kind==='cloze'||c.kind==='recall'
@@ -104,7 +106,7 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
    return {...next,points:Math.max(0,next.points+gain)};
   });
   const streak=ok?v.streak+1:0;
-  setS({...v,result,outcome,typed,gain,review,taught:teaching,mastered:climbed,score:v.score+gain,streak,best:Math.max(v.best,streak),
+  setS({...v,result,outcome,typed,gain,review,taught:teaching,mastered:climbed,dropped,score:v.score+gain,streak,best:Math.max(v.best,streak),
    answered:v.answered+1,right:v.right+(outcome==='clean'?1:0),collected:v.collected+fresh,
    bonuses:v.bonuses+(review?.usedBonus?1:0),
    taughtCount:v.taughtCount+(teaching?1:0),done:[...v.done,{card:c,outcome,typed,review}],
@@ -285,7 +287,9 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
      ?<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>
      :s.outcome==='clean'
       ?<span className="collected"><Sparkles size={13}/> sound French — mastery {cleanSoFar}/{MASTERY}</span>
-      :<span className="slip">Mastery holds at {cleanSoFar}/{MASTERY} — it moves on a sentence the grader calls sound.</span>}
+      :s.dropped
+       ?<span className="mark-drop"><TrendingDown size={13}/> mastery back to {cleanSoFar}/{MASTERY}</span>
+       :<span className="slip">Mastery holds at {cleanSoFar}/{MASTERY} — it moves on a sentence the grader calls sound.</span>}
    </div>}
 
    {result&&c.kind!=='compose'&&<div className="verdict">
@@ -303,7 +307,9 @@ export default function Play({words,state,setState,picked,setPicked,notice,openW
      ?<span className="mastered"><Trophy size={14}/> Mastered — {MASTERY} clean answers. Moved to your known words.</span>
      :c.kind==='meaning'
       ?<span className="slip">Logged against the word. Mastery holds at {cleanSoFar}/{MASTERY} — only writing the French moves it.</span>
-      :s.outcome==='clean'&&<span className="collected"><Sparkles size={13}/> mastery {cleanSoFar}/{MASTERY}</span>}
+      :s.dropped
+       ?<span className="mark-drop"><TrendingDown size={13}/> mastery back to {cleanSoFar}/{MASTERY}</span>
+       :s.outcome==='clean'&&<span className="collected"><Sparkles size={13}/> mastery {cleanSoFar}/{MASTERY}</span>}
     {!!s.collected&&<span className="collected"><Sparkles size={13}/> {s.collected} sentence word{s.collected===1?'':'s'} saved to your library</span>}
    </div>}
 

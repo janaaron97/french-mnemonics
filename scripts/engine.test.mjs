@@ -169,13 +169,16 @@ test('ten clean answers retire a word to known, and only clean ones count',()=>{
   assert.equal(mastery(state.cards['42']),i+1);
   assert.ok(state.lib['42'],'left the library at '+(i+1));
  }
- for(const g of ['hard','again','hard']){
-  const {next,mastered}=applyGrade(state,'42',g,50);
-  state=next;
-  assert.equal(mastered,false,g+' should not master');
-  assert.equal(mastery(state.cards['42']),9,g+' moved mastery');
- }
- const {next,mastered}=applyGrade(state,'42','good',99);
+ // a close answer holds; a miss gives a point back
+ let {next,mastered}=applyGrade(state,'42','hard',50);
+ state=next;
+ assert.equal(mastered,false);
+ assert.equal(mastery(state.cards['42']),9,'a close answer must not move mastery');
+ state=applyGrade(state,'42','again',50).next;
+ assert.equal(mastery(state.cards['42']),8,'a miss gives a mastery point back');
+ state=applyGrade(state,'42','good',50).next;
+ assert.equal(mastery(state.cards['42']),9,'and it is earned again the same way');
+ ({next,mastered}=applyGrade(state,'42','good',99));
  assert.equal(mastered,true);
  assert.equal(next.known['42'],99);
  assert.equal(next.lib['42'],undefined);
@@ -400,4 +403,25 @@ test('every level has a name, and the ladder never runs out',()=>{
  assert.equal(rankName(undefined),'Doorstep');
  for(let l=1;l<=200;l++)assert.ok(rankName(l).length>2,'no name at '+l);
  assert.equal(new Set(RANKS).size,RANKS.length,'the rooms are all different');
+});
+
+test('mastery falls on a miss, but only where the round asked you to write it',()=>{
+ let card=null;
+ for(let i=0;i<4;i++)card=schedule(card,'good',0);
+ assert.equal(mastery(card),4);
+ card=schedule(card,'again',0);
+ assert.equal(mastery(card),3,'a miss costs a point');
+ assert.equal(card.clean,4,'and the answer log is untouched by the loss');
+ card=schedule(card,'hard',0);
+ assert.equal(mastery(card),3,'a close answer holds');
+ card=schedule(card,'again',0,false);
+ assert.equal(mastery(card),3,'a miss in a round that never asked for the French costs nothing');
+ for(let i=0;i<9;i++)card=schedule(card,'again',0);
+ assert.equal(mastery(card),0,'it stops at nothing rather than going negative');
+ assert.ok(card.missed>0);
+ // a word retired at MASTERY can come back down if it is ever studied again
+ let full=null;
+ for(let i=0;i<MASTERY;i++)full=schedule(full,'good',0);
+ assert.equal(mastery(full),MASTERY);
+ assert.equal(mastery(schedule(full,'again',0)),MASTERY-1);
 });

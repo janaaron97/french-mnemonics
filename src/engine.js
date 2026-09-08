@@ -112,18 +112,25 @@ const tally={again:'missed',hard:'close',good:'clean',easy:'clean'};
 // clean/close/missed log every answer, whichever round it came from. `spelled`
 // is the subset where you actually produced the French, and it alone drives
 // mastery — recognising the English is worth recording, but it is not the same
-// skill as writing the word. Cards from before the split fall back to `clean`,
-// which is what mastery used to mean, so no stored progress moves.
+// skill as writing the word. Unlike the log, it falls as well as rises: a word
+// you used to spell and now cannot is not a word you have mastered. Cards from
+// before the split fall back to `clean`, which is what mastery used to mean, so
+// no stored progress moves.
 export const spelledCount=card=>card?.spelled??card?.clean??0;
 export function schedule(previous,grade,now=Date.now(),spells=true){
  const old=previous?.interval||0;
  const interval=grade==='again'?0:grade==='hard'?Math.max(1,Math.round(old*1.2)):grade==='good'?Math.max(1,Math.round(old*2.5)):Math.max(4,Math.round(old*3.5));
  const hit=tally[grade];
+ // Mastery moves both ways, and only in a round that asked you to produce the
+ // French: a clean answer earns a point, a miss gives one back, and a close
+ // answer holds where it is. It cannot go below nothing.
+ const held=spelledCount(previous);
+ const spelled=!spells?held:hit==='clean'?held+1:hit==='missed'?Math.max(0,held-1):held;
  return {interval,due:now+(grade==='again'?60000:interval*86400000),reviews:(previous?.reviews||0)+1,last:now,
   clean:(previous?.clean||0)+(hit==='clean'?1:0),
   close:(previous?.close||0)+(hit==='close'?1:0),
   missed:(previous?.missed||0)+(hit==='missed'?1:0),
-  spelled:spelledCount(previous)+(hit==='clean'&&spells?1:0)};
+  spelled};
 }
 export const mastery=card=>Math.min(MASTERY,spelledCount(card));
 export const seen=card=>card?.reviews||0;

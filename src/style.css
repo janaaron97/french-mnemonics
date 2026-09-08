@@ -888,3 +888,5 @@ footer{color:var(--dim)}
  .ladder li{grid-template-columns:18px 22px 1fr;gap:8px}
  .ladder li.here .rung-body b{font-size:17px}
 }
+
+.mark-drop{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--red)}
